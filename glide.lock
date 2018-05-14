@@ -1,5 +1,5 @@
-hash: fffb16e3784c830850b548bb848652a9af10f81c4d4999587d56f5f290cd7e17
-updated: 2018-05-15T02:16:52.78842426-04:00
+hash: ed4b733f23a3ef82787402119f247e1bd9746f2420fd2ea578fa7550d2639b50
+updated: 2018-05-14T20:23:19.225996711-04:00
 imports:
 - name: github.com/alecthomas/template
   version: a0175ee3bccc567396460bf5acd36800cb10c49c
@@ -229,7 +229,7 @@ imports:
   - metric
   - policy
 - name: github.com/m3db/m3ninx
-  version: 86c298e7e8aabd2c165ee0b85ebbde8e47edf067
+  version: 0e8af16fe7892670bfffa54d5735d6a702a2bb74
   subpackages:
   - doc
   - generated/proto/fswriter

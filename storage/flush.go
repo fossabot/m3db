@@ -184,6 +184,12 @@ func (m *flushManager) Report() {
 	} else {
 		m.isSnapshotting.Update(0)
 	}
+
+	if state == flushManagerIndexFlushInProgress {
+		m.isIndexFlushing.Update(1)
+	} else {
+		m.isIndexFlushing.Update(0)
+	}
 }
 
 func (m *flushManager) setState(state flushManagerState) {
