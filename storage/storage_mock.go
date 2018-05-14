@@ -946,6 +946,18 @@ func (mr *MockdatabaseNamespaceMockRecorder) Flush(blockStart, ShardBootstrapSta
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Flush", reflect.TypeOf((*MockdatabaseNamespace)(nil).Flush), blockStart, ShardBootstrapStates, flush)
 }
 
+// FlushIndex mocks base method
+func (m *MockdatabaseNamespace) FlushIndex(tickStart time.Time, flush persist.IndexFlush) error {
+	ret := m.ctrl.Call(m, "FlushIndex", tickStart, flush)
+	ret0, _ := ret[0].(error)
+	return ret0
+}
+
+// FlushIndex indicates an expected call of FlushIndex
+func (mr *MockdatabaseNamespaceMockRecorder) FlushIndex(tickStart, flush interface{}) *gomock.Call {
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "FlushIndex", reflect.TypeOf((*MockdatabaseNamespace)(nil).FlushIndex), tickStart, flush)
+}
+
 // Snapshot mocks base method
 func (m *MockdatabaseNamespace) Snapshot(blockStart, snapshotTime time.Time, flush persist.DataFlush) error {
 	ret := m.ctrl.Call(m, "Snapshot", blockStart, snapshotTime, flush)
@@ -1418,6 +1430,18 @@ func (m *MocknamespaceIndex) Bootstrap(bootstrapResults result.IndexResults) err
 // Bootstrap indicates an expected call of Bootstrap
 func (mr *MocknamespaceIndexMockRecorder) Bootstrap(bootstrapResults interface{}) *gomock.Call {
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Bootstrap", reflect.TypeOf((*MocknamespaceIndex)(nil).Bootstrap), bootstrapResults)
+}
+
+// Flush mocks base method
+func (m *MocknamespaceIndex) Flush(tickStart time.Time, flush persist.IndexFlush) error {
+	ret := m.ctrl.Call(m, "Flush", tickStart, flush)
+	ret0, _ := ret[0].(error)
+	return ret0
+}
+
+// Flush indicates an expected call of Flush
+func (mr *MocknamespaceIndexMockRecorder) Flush(tickStart, flush interface{}) *gomock.Call {
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Flush", reflect.TypeOf((*MocknamespaceIndex)(nil).Flush), tickStart, flush)
 }
 
 // Tick mocks base method

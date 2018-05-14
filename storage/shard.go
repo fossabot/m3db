@@ -357,9 +357,9 @@ func (s *dbShard) OnRetrieveBlock(
 
 	// NB(r): Do not need to specify that needs to be indexed as series would
 	// have been already been indexed when it was written
-	copiedID := entry.series.ID()
+	copiedID := entry.Series.ID()
 	copiedTagsIter := s.identifierPool.TagsIterator()
-	copiedTagsIter.Reset(entry.series.Tags())
+	copiedTagsIter.Reset(entry.Series.Tags())
 	s.insertQueue.Insert(dbShardInsert{
 		entry: entry,
 		opts: dbShardInsertAsyncOptions{
@@ -1716,7 +1716,7 @@ func (s *dbShard) Bootstrap(
 		dbBlocks.Tags.Finalize()
 
 		// Cannot close blocks once done as series takes ref to these
-		bsResult, err := entry.series.Bootstrap(dbBlocks.Blocks)
+		bsResult, err := entry.Series.Bootstrap(dbBlocks.Blocks)
 		if err != nil {
 			multiErr = multiErr.Add(err)
 		}
@@ -1802,7 +1802,7 @@ func (s *dbShard) Flush(
 		// racing competing processes.
 		DeleteIfExists: false,
 	}
-	prepared, err := flush.Prepare(prepareOpts)
+	prepared, err := flush.PrepareData(prepareOpts)
 	if err != nil {
 		return s.markFlushStateSuccessOrError(blockStart, err)
 	}
@@ -1872,7 +1872,7 @@ func (s *dbShard) Snapshot(
 		// would have to be a competing process to cause a collision.
 		DeleteIfExists: false,
 	}
-	prepared, err := flush.Prepare(prepareOpts)
+	prepared, err := flush.PrepareData(prepareOpts)
 	// Add the err so the defer will capture it
 	multiErr = multiErr.Add(err)
 	if err != nil {

@@ -23,6 +23,7 @@ package fs
 import (
 	"errors"
 	"fmt"
+	"io"
 	"strconv"
 	"sync"
 	"time"
@@ -32,6 +33,9 @@ import (
 	"github.com/m3db/m3db/ratelimit"
 	"github.com/m3db/m3db/runtime"
 	"github.com/m3db/m3db/ts"
+	"github.com/m3db/m3ninx/index/segment"
+	m3ninxfs "github.com/m3db/m3ninx/index/segment/fs"
+	m3ninxpersist "github.com/m3db/m3ninx/persist"
 	"github.com/m3db/m3x/checked"
 	"github.com/m3db/m3x/ident"
 	"github.com/m3db/m3x/instrument"
@@ -48,14 +52,16 @@ type persistManagerStatus int
 
 const (
 	persistManagerIdle persistManagerStatus = iota
-	persistManagerPersisting
+	persistManagerPersistingData
+	persistManagerPersistingIndex
 )
 
 var (
-	errPersistManagerNotIdle                    = errors.New("persist manager cannot start persist, not idle")
-	errPersistManagerNotPersisting              = errors.New("persist manager cannot finish persisting, not persisting")
-	errPersistManagerCannotPrepareNotPersisting = errors.New("persist manager cannot prepare, not persisting")
-	errPersistManagerFileSetAlreadyExists       = errors.New("persist manager cannot prepare, fileset already exists")
+	errPersistManagerNotIdle                         = errors.New("persist manager cannot start persist, not idle")
+	errPersistManagerNotPersisting                   = errors.New("persist manager cannot finish persisting, not persisting")
+	errPersistManagerCannotPrepareDataNotPersisting  = errors.New("persist manager cannot prepare data, not persisting")
+	errPersistManagerCannotPrepareIndexNotPersisting = errors.New("persist manager cannot prepare index, not persisting")
+	errPersistManagerFileSetAlreadyExists            = errors.New("persist manager cannot prepare, fileset already exists")
 )
 
 type sleepFn func(time.Duration)
@@ -69,11 +75,9 @@ type persistManager struct {
 	filePathPrefix string
 	nowFn          clock.NowFn
 	sleepFn        sleepFn
-	writer         DataFileSetWriter
-	// segmentHolder is a two-item slice that's reused to hold pointers to the
-	// head and the tail of each segment so we don't need to allocate memory
-	// and gc it shortly after.
-	segmentHolder []checked.Bytes
+
+	dataPM  dataPersistManager
+	indexPM indexPersistManager
 
 	status            persistManagerStatus
 	currRateLimitOpts ratelimit.Options
@@ -85,6 +89,20 @@ type persistManager struct {
 	slept        time.Duration
 
 	metrics persistManagerMetrics
+}
+
+type dataPersistManager struct {
+	writer DataFileSetWriter
+	// segmentHolder is a two-item slice that's reused to hold pointers to the
+	// head and the tail of each segment so we don't need to allocate memory
+	// and gc it shortly after.
+	segmentHolder []checked.Bytes
+}
+
+type indexPersistManager struct {
+	opts          persist.IndexPrepareOptions
+	writer        IndexFileSetWriter
+	segmentWriter m3ninxpersist.MutableSegmentFileSetWriter
 }
 
 type persistManagerMetrics struct {
@@ -105,7 +123,16 @@ func NewPersistManager(opts Options) (persist.Manager, error) {
 		filePathPrefix = opts.FilePathPrefix()
 		scope          = opts.InstrumentOptions().MetricsScope().SubScope("persist")
 	)
-	writer, err := NewWriter(opts)
+	dataWriter, err := NewWriter(opts)
+	if err != nil {
+		return nil, err
+	}
+
+	idxWriter, err := NewIndexWriter(opts)
+	if err != nil {
+		return nil, err
+	}
+	segmentWriter, err := m3ninxpersist.NewMutableSegmentFileSetWriter()
 	if err != nil {
 		return nil, err
 	}
@@ -115,13 +142,264 @@ func NewPersistManager(opts Options) (persist.Manager, error) {
 		filePathPrefix: filePathPrefix,
 		nowFn:          opts.ClockOptions().NowFn(),
 		sleepFn:        time.Sleep,
-		writer:         writer,
-		segmentHolder:  make([]checked.Bytes, 2),
-		status:         persistManagerIdle,
-		metrics:        newPersistManagerMetrics(scope),
+		dataPM: dataPersistManager{
+			writer:        dataWriter,
+			segmentHolder: make([]checked.Bytes, 2),
+		},
+		indexPM: indexPersistManager{
+			writer:        idxWriter,
+			segmentWriter: segmentWriter,
+		},
+		status:  persistManagerIdle,
+		metrics: newPersistManagerMetrics(scope),
 	}
 	opts.RuntimeOptionsManager().RegisterListener(pm)
 	return pm, nil
+}
+
+func (pm *persistManager) reset() {
+	pm.status = persistManagerIdle
+	pm.start = timeZero
+	pm.count = 0
+	pm.bytesWritten = 0
+	pm.worked = 0
+	pm.slept = 0
+}
+
+// StartIndexPersist is called by the databaseFlushManager to begin the persist process for
+// index data.
+func (pm *persistManager) StartIndexPersist() (persist.IndexFlush, error) {
+	pm.Lock()
+	defer pm.Unlock()
+
+	if pm.status != persistManagerIdle {
+		return nil, errPersistManagerNotIdle
+	}
+	pm.status = persistManagerPersistingIndex
+
+	return pm, nil
+}
+
+// PrepareIndex returns a prepared persist object which can be used to persist index data.
+func (pm *persistManager) PrepareIndex(opts persist.IndexPrepareOptions) (persist.PreparedIndexPersist, error) {
+
+	var (
+		nsMetadata = opts.NamespaceMetadata
+		blockStart = opts.BlockStart
+		nsID       = opts.NamespaceMetadata.ID()
+		prepared   persist.PreparedIndexPersist
+	)
+
+	if !nsMetadata.Options().IndexOptions().Enabled() {
+		return prepared, fmt.Errorf("unable to PrepareIndex, namespace %s does not have indexing enabled", nsID.String())
+	}
+
+	// ensure StartIndexPersist has been called
+	pm.RLock()
+	status := pm.status
+	pm.RUnlock()
+
+	if status != persistManagerPersistingIndex {
+		return prepared, errPersistManagerCannotPrepareIndexNotPersisting
+	}
+
+	blockSize := nsMetadata.Options().IndexOptions().BlockSize()
+	idxWriterOpts := IndexWriterOpenOptions{
+		BlockSize:   blockSize,
+		FileSetType: opts.FileSetType,
+		Identifier: FileSetFileIdentifier{
+			FileSetContentType: persist.FileSetIndexContentType,
+			Namespace:          nsID,
+			BlockStart:         blockStart,
+		},
+	}
+	pm.indexPM.opts = opts
+	if err := pm.indexPM.writer.Open(idxWriterOpts); err != nil {
+		return prepared, err
+	}
+
+	prepared.Persist = pm.persistIndex
+	prepared.Close = pm.closeIndex
+
+	return prepared, nil
+}
+
+func (pm *persistManager) persistIndex(seg segment.MutableSegment) error {
+	// FOLLOWUP(prateek): need to use-rate limiting runtime options in this code path
+
+	if err := pm.indexPM.segmentWriter.Reset(seg); err != nil {
+		return err
+	}
+
+	return pm.indexPM.writer.WriteSegmentFileSet(pm.indexPM.segmentWriter)
+}
+
+func (pm *persistManager) closeIndex() ([]segment.Segment, persist.Closer, error) {
+	if err := pm.indexPM.writer.Close(); err != nil {
+		return nil, nil, err
+	}
+
+	readerOpts := IndexReaderOpenOptions{
+		Identifier: FileSetFileIdentifier{
+			BlockStart:         pm.indexPM.opts.BlockStart,
+			Namespace:          pm.indexPM.opts.NamespaceMetadata.ID(),
+			FileSetContentType: persist.FileSetIndexContentType,
+		},
+		FileSetType: pm.indexPM.opts.FileSetType,
+	}
+
+	reader, err := NewIndexReader(pm.opts)
+	if err != nil {
+		return nil, nil, err
+	}
+
+	var (
+		segments []segment.Segment
+		success  = false
+	)
+
+	defer func() {
+		if !success {
+			for _, seg := range segments {
+				seg.Close()
+			}
+			reader.Close()
+		}
+	}()
+
+	if err := reader.Open(readerOpts); err != nil {
+		return nil, nil, err
+	}
+	segments = make([]segment.Segment, 0, reader.SegmentFileSets())
+
+	for {
+		fileset, err := reader.ReadSegmentFileSet()
+		if err == io.EOF {
+			break
+		}
+		if err != nil {
+			return nil, nil, err
+		}
+
+		seg, err := m3ninxpersist.NewSegment(fileset, m3ninxfs.NewSegmentOpts{
+			PostingsListPool: pm.opts.PostingsListPool(),
+		})
+		if err != nil {
+			return nil, nil, err
+		}
+
+		segments = append(segments, seg)
+	}
+
+	success = true
+	return segments, reader.Close, nil
+}
+
+// DoneIndex is called by the databaseFlushManager to finish the index persist process.
+func (pm *persistManager) DoneIndex() error {
+	pm.Lock()
+	defer pm.Unlock()
+
+	if pm.status != persistManagerPersistingIndex {
+		return errPersistManagerNotPersisting
+	}
+
+	// Emit timing metrics
+	pm.metrics.writeDurationMs.Update(float64(pm.worked / time.Millisecond))
+	pm.metrics.throttleDurationMs.Update(float64(pm.slept / time.Millisecond))
+
+	// Reset state
+	pm.reset()
+
+	return nil
+}
+
+// StartDataPersist is called by the databaseFlushManager to begin the persist process
+func (pm *persistManager) StartDataPersist() (persist.DataFlush, error) {
+	pm.Lock()
+	defer pm.Unlock()
+
+	if pm.status != persistManagerIdle {
+		return nil, errPersistManagerNotIdle
+	}
+	pm.status = persistManagerPersistingData
+
+	return pm, nil
+}
+
+// PrepareData returns a prepared persist object which can be used to persist data.
+func (pm *persistManager) PrepareData(opts persist.DataPrepareOptions) (persist.PreparedDataPersist, error) {
+
+	var (
+		nsMetadata   = opts.NamespaceMetadata
+		shard        = opts.Shard
+		blockStart   = opts.BlockStart
+		snapshotTime = opts.SnapshotTime
+		nsID         = opts.NamespaceMetadata.ID()
+		prepared     persist.PreparedDataPersist
+	)
+
+	// ensure StartDataPersist has been called
+	pm.RLock()
+	status := pm.status
+	pm.RUnlock()
+
+	if status != persistManagerPersistingData {
+		return prepared, errPersistManagerCannotPrepareDataNotPersisting
+	}
+
+	exists, err := pm.dataFilesetExistsAt(opts)
+	if err != nil {
+		return prepared, err
+	}
+
+	if exists && !opts.DeleteIfExists {
+		// This should never happen in practice since we always track which times
+		// are flushed in the shard when we bootstrap (so we should never
+		// duplicately write out one of those files) and for snapshotting we append
+		// a monotonically increasing number to avoid collisions.
+		// instrument.
+		iopts := pm.opts.InstrumentOptions()
+		l := instrument.EmitInvariantViolationAndGetLogger(iopts)
+		l.WithFields(
+			xlog.NewField("blockStart", blockStart.String()),
+			xlog.NewField("fileSetType", opts.FileSetType.String()),
+			xlog.NewField("snapshotStart", snapshotTime.String()),
+			xlog.NewField("namespace", nsID.String()),
+			xlog.NewField("shard", strconv.Itoa(int(shard))),
+		).Errorf("prepared writing fileset volume that already exists")
+		return prepared, errPersistManagerFileSetAlreadyExists
+	}
+
+	if exists && opts.DeleteIfExists {
+		err := DeleteFileSetAt(pm.opts.FilePathPrefix(), nsID, shard, blockStart)
+		if err != nil {
+
+			return prepared, err
+		}
+	}
+
+	blockSize := nsMetadata.Options().RetentionOptions().BlockSize()
+	dataWriterOpts := DataWriterOpenOptions{
+		BlockSize: blockSize,
+		Snapshot: DataWriterSnapshotOptions{
+			SnapshotTime: snapshotTime,
+		},
+		FileSetType: opts.FileSetType,
+		Identifier: FileSetFileIdentifier{
+			Namespace:  nsID,
+			Shard:      shard,
+			BlockStart: blockStart,
+		},
+	}
+	if err := pm.dataPM.writer.Open(dataWriterOpts); err != nil {
+		return prepared, err
+	}
+
+	prepared.Persist = pm.persist
+	prepared.Close = pm.close
+
+	return prepared, nil
 }
 
 func (pm *persistManager) persist(
@@ -156,9 +434,9 @@ func (pm *persistManager) persist(
 		}
 	}
 
-	pm.segmentHolder[0] = segment.Head
-	pm.segmentHolder[1] = segment.Tail
-	err := pm.writer.WriteAll(id, tags, pm.segmentHolder, checksum)
+	pm.dataPM.segmentHolder[0] = segment.Head
+	pm.dataPM.segmentHolder[1] = segment.Tail
+	err := pm.dataPM.writer.WriteAll(id, tags, pm.dataPM.segmentHolder, checksum)
 	pm.count++
 	pm.bytesWritten += int64(segment.Len())
 
@@ -171,28 +449,15 @@ func (pm *persistManager) persist(
 }
 
 func (pm *persistManager) close() error {
-	return pm.writer.Close()
+	return pm.dataPM.writer.Close()
 }
 
-// StartDataPersist is called by the databaseFlushManager to begin the persist process
-func (pm *persistManager) StartDataPersist() (persist.DataFlush, error) {
+// DoneData is called by the databaseFlushManager to finish the data persist process.
+func (pm *persistManager) DoneData() error {
 	pm.Lock()
 	defer pm.Unlock()
 
-	if pm.status != persistManagerIdle {
-		return nil, errPersistManagerNotIdle
-	}
-	pm.status = persistManagerPersisting
-
-	return pm, nil
-}
-
-// Done is called by the databaseFlushManager to finish the persist process
-func (pm *persistManager) Done() error {
-	pm.Lock()
-	defer pm.Unlock()
-
-	if pm.status != persistManagerPersisting {
+	if pm.status != persistManagerPersistingData {
 		return errPersistManagerNotPersisting
 	}
 
@@ -206,92 +471,7 @@ func (pm *persistManager) Done() error {
 	return nil
 }
 
-func (pm *persistManager) reset() {
-	pm.status = persistManagerIdle
-	pm.start = timeZero
-	pm.count = 0
-	pm.bytesWritten = 0
-	pm.worked = 0
-	pm.slept = 0
-}
-
-// Prepare returns a prepared persist object which can be used to persist data. Note that this
-// method will return (nil, nil) if the files already exist.
-func (pm *persistManager) Prepare(opts persist.DataPrepareOptions) (persist.PreparedDataPersist, error) {
-
-	var (
-		nsMetadata   = opts.NamespaceMetadata
-		shard        = opts.Shard
-		blockStart   = opts.BlockStart
-		snapshotTime = opts.SnapshotTime
-		nsID         = opts.NamespaceMetadata.ID()
-		prepared     persist.PreparedDataPersist
-	)
-
-	// ensure StartDataPersist has been called
-	pm.RLock()
-	status := pm.status
-	pm.RUnlock()
-
-	if status != persistManagerPersisting {
-		return prepared, errPersistManagerCannotPrepareNotPersisting
-	}
-
-	exists, err := pm.filesetExistsAt(opts)
-	if err != nil {
-		return prepared, err
-	}
-
-	if exists && !opts.DeleteIfExists {
-		// This should never happen in practice since we always track which times
-		// are flushed in the shard when we bootstrap (so we should never
-		// duplicately write out one of those files) and for snapshotting we append
-		// a monotonically increasing number to avoid collisions.
-		// instrument.
-		iopts := pm.opts.InstrumentOptions()
-		l := instrument.EmitInvariantViolationAndGetLogger(iopts)
-		l.WithFields(
-			xlog.NewField("blockStart", blockStart.String()),
-			xlog.NewField("fileSetType", opts.FileSetType.String()),
-			xlog.NewField("snapshotStart", snapshotTime.String()),
-			xlog.NewField("namespace", nsID.String()),
-			xlog.NewField("shard", strconv.Itoa(int(shard))),
-		).Errorf("prepared writing fileset volume that already exists")
-		return prepared, errPersistManagerFileSetAlreadyExists
-	}
-
-	if exists && opts.DeleteIfExists {
-		err := DeleteFileSetAt(pm.opts.FilePathPrefix(), nsID, shard, blockStart)
-		if err != nil {
-
-			return prepared, err
-		}
-	}
-
-	blockSize := nsMetadata.Options().RetentionOptions().BlockSize()
-	writerOpts := DataWriterOpenOptions{
-		BlockSize: blockSize,
-		Snapshot: DataWriterSnapshotOptions{
-			SnapshotTime: snapshotTime,
-		},
-		FileSetType: opts.FileSetType,
-		Identifier: FileSetFileIdentifier{
-			Namespace:  nsID,
-			Shard:      shard,
-			BlockStart: blockStart,
-		},
-	}
-	if err := pm.writer.Open(writerOpts); err != nil {
-		return prepared, err
-	}
-
-	prepared.Persist = pm.persist
-	prepared.Close = pm.close
-
-	return prepared, nil
-}
-
-func (pm *persistManager) filesetExistsAt(prepareOpts persist.DataPrepareOptions) (bool, error) {
+func (pm *persistManager) dataFilesetExistsAt(prepareOpts persist.DataPrepareOptions) (bool, error) {
 	var (
 		blockStart = prepareOpts.BlockStart
 		shard      = prepareOpts.Shard
