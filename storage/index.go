@@ -28,6 +28,7 @@ import (
 	"time"
 
 	"github.com/m3db/m3db/clock"
+	"github.com/m3db/m3db/persist"
 	"github.com/m3db/m3db/retention"
 	"github.com/m3db/m3db/storage/bootstrap/result"
 	m3dberrors "github.com/m3db/m3db/storage/errors"
@@ -47,6 +48,7 @@ var (
 	errDbIndexAlreadyClosed               = errors.New("database index has already been closed")
 	errDbIndexUnableToWriteClosed         = errors.New("unable to write to database index, already closed")
 	errDbIndexUnableToQueryClosed         = errors.New("unable to query database index, already closed")
+	errDbIndexUnableToFlushClosed         = errors.New("unable to flush database index, already closed")
 	errDbIndexTerminatingTickCancellation = errors.New("terminating tick early due to cancellation")
 	errDbIndexIsBootstrapping             = errors.New("index is already bootstrapping")
 )
@@ -445,6 +447,40 @@ func (i *nsIndex) Tick(c context.Cancellable) (namespaceIndexTickResult, error) 
 	}
 
 	return result, multiErr.FinalError()
+}
+
+func (i *nsIndex) Flush(
+	tickStart time.Time,
+	flush persist.IndexFlush,
+) error {
+	i.state.RLock()
+	defer i.state.RUnlock()
+	if !i.isOpenWithRLock() {
+		return errDbIndexUnableToFlushClosed
+	}
+
+	var (
+		lastFlushableBlockStart = retention.FlushTimeEndForBlockSize(i.blockSize, tickStart.Add(-i.bufferPast))
+		multiErr                xerrors.MultiError
+	)
+
+	for blockStart, block := range i.state.blocksByTime {
+		// flush any blocks that are flushable
+		if !blockStart.ToTime().After(lastFlushableBlockStart) && block.IsSealed() {
+			prepared, err := flush.PrepareIndex(persist.IndexPrepareOptions{
+				BlockStart:        blockStart.ToTime(),
+				FileSetType:       persist.FileSetFlushType,
+				NamespaceMetadata: i.nsMetadata,
+			})
+			if err != nil {
+				multiErr = multiErr.Add(err)
+				continue
+			}
+			multiErr = multiErr.Add(block.Flush(prepared))
+		}
+	}
+
+	return multiErr.FinalError()
 }
 
 func (i *nsIndex) Query(

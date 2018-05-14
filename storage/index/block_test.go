@@ -171,7 +171,7 @@ func TestBlockWriteMockSegment(t *testing.T) {
 	h2.EXPECT().OnIndexSuccess(xtime.ToUnixNano(blockStart))
 
 	seg := segment.NewMockMutableSegment(ctrl)
-	b.segment = seg
+	b.activeSegment = seg
 	seg.EXPECT().InsertBatch(index.NewBatchMatcher(
 		index.Batch{
 			Docs:                []doc.Document{testDoc1(), testDoc1DupeID()},
@@ -275,7 +275,7 @@ func TestBlockWriteMockSegmentPartialFailure(t *testing.T) {
 	require.True(t, ok)
 
 	seg := segment.NewMockMutableSegment(ctrl)
-	b.segment = seg
+	b.activeSegment = seg
 
 	h1 := NewMockOnIndexSeries(ctrl)
 	h1.EXPECT().OnIndexFinalize(xtime.ToUnixNano(blockStart))
@@ -349,7 +349,7 @@ func TestBlockWriteMockSegmentUnexpectedErrorType(t *testing.T) {
 	require.True(t, ok)
 
 	seg := segment.NewMockMutableSegment(ctrl)
-	b.segment = seg
+	b.activeSegment = seg
 
 	h1 := NewMockOnIndexSeries(ctrl)
 	h1.EXPECT().OnIndexFinalize(xtime.ToUnixNano(blockStart))
@@ -439,7 +439,7 @@ func TestBlockQuerySegmentReaderError(t *testing.T) {
 	require.True(t, ok)
 
 	seg := segment.NewMockMutableSegment(ctrl)
-	b.segment = seg
+	b.activeSegment = seg
 	randErr := fmt.Errorf("random-err")
 	seg.EXPECT().Reader().Return(nil, randErr)
 
@@ -462,8 +462,8 @@ func TestBlockQueryBootstrapSegmentsError(t *testing.T) {
 	seg2 := segment.NewMockMutableSegment(ctrl)
 	seg3 := segment.NewMockMutableSegment(ctrl)
 
-	b.segment = seg1
-	b.bootstrappedSegments = append(b.bootstrappedSegments, seg2, seg3)
+	b.activeSegment = seg1
+	b.inactiveMutableSegments = append(b.inactiveMutableSegments, seg2, seg3)
 
 	r1 := index.NewMockReader(ctrl)
 	seg1.EXPECT().Reader().Return(r1, nil)
@@ -817,8 +817,8 @@ func TestBlockBootstrapAddsSegment(t *testing.T) {
 
 	seg1 := segment.NewMockMutableSegment(ctrl)
 	require.NoError(t, b.Bootstrap([]segment.Segment{seg1}))
-	require.Equal(t, 1, len(b.bootstrappedSegments))
-	require.Equal(t, seg1, b.bootstrappedSegments[0])
+	require.Equal(t, 1, len(b.inactiveMutableSegments))
+	require.Equal(t, seg1, b.inactiveMutableSegments[0])
 }
 
 func TestBlockBootstrapAfterCloseFails(t *testing.T) {
@@ -848,8 +848,8 @@ func TestBlockBootstrapAfterSealWorks(t *testing.T) {
 
 	seg1 := segment.NewMockMutableSegment(ctrl)
 	require.NoError(t, b.Bootstrap([]segment.Segment{seg1}))
-	require.Equal(t, 1, len(b.bootstrappedSegments))
-	require.Equal(t, seg1, b.bootstrappedSegments[0])
+	require.Equal(t, 1, len(b.inactiveMutableSegments))
+	require.Equal(t, seg1, b.inactiveMutableSegments[0])
 }
 
 func TestBlockTickSingleSegment(t *testing.T) {
@@ -864,7 +864,7 @@ func TestBlockTickSingleSegment(t *testing.T) {
 	require.True(t, ok)
 
 	seg1 := segment.NewMockMutableSegment(ctrl)
-	b.segment = seg1
+	b.activeSegment = seg1
 	seg1.EXPECT().Size().Return(int64(10))
 
 	result, err := blk.Tick(nil)
@@ -885,12 +885,12 @@ func TestBlockTickMultipleSegment(t *testing.T) {
 	require.True(t, ok)
 
 	seg1 := segment.NewMockMutableSegment(ctrl)
-	b.segment = seg1
+	b.activeSegment = seg1
 	seg1.EXPECT().Size().Return(int64(10))
 
 	seg2 := segment.NewMockMutableSegment(ctrl)
 	seg2.EXPECT().Size().Return(int64(20))
-	b.bootstrappedSegments = append(b.bootstrappedSegments, seg2)
+	b.inactiveMutableSegments = append(b.inactiveMutableSegments, seg2)
 
 	result, err := blk.Tick(nil)
 	require.NoError(t, err)
@@ -911,7 +911,7 @@ func TestBlockTickAfterSeal(t *testing.T) {
 	require.True(t, ok)
 
 	seg1 := segment.NewMockMutableSegment(ctrl)
-	b.segment = seg1
+	b.activeSegment = seg1
 	seg1.EXPECT().Size().Return(int64(10))
 
 	result, err := blk.Tick(nil)
