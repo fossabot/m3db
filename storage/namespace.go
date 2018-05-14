@@ -142,6 +142,7 @@ type databaseNamespaceIndexStatsLastTick struct {
 type databaseNamespaceMetrics struct {
 	bootstrap           instrument.MethodMetrics
 	flush               instrument.MethodMetrics
+	flushIndex          instrument.MethodMetrics
 	snapshot            instrument.MethodMetrics
 	write               instrument.MethodMetrics
 	writeTagged         instrument.MethodMetrics
@@ -210,6 +211,7 @@ func newDatabaseNamespaceMetrics(scope tally.Scope, samplingRate float64) databa
 	return databaseNamespaceMetrics{
 		bootstrap:           instrument.NewMethodMetrics(scope, "bootstrap", samplingRate),
 		flush:               instrument.NewMethodMetrics(scope, "flush", samplingRate),
+		flushIndex:          instrument.NewMethodMetrics(scope, "flushIndex", samplingRate),
 		snapshot:            instrument.NewMethodMetrics(scope, "snapshot", samplingRate),
 		write:               instrument.NewMethodMetrics(scope, "write", samplingRate),
 		writeTagged:         instrument.NewMethodMetrics(scope, "write-tagged", samplingRate),
@@ -846,6 +848,34 @@ func (n *dbNamespace) Flush(
 	res := multiErr.FinalError()
 	n.metrics.flush.ReportSuccessOrError(res, n.nowFn().Sub(callStart))
 	return res
+}
+
+func (n *dbNamespace) FlushIndex(
+	tickStart time.Time,
+	flush persist.IndexFlush,
+) error {
+	callStart := n.nowFn()
+	n.RLock()
+	if n.bs != Bootstrapped {
+		n.RUnlock()
+		n.metrics.flushIndex.ReportError(n.nowFn().Sub(callStart))
+		return errNamespaceNotBootstrapped
+	}
+	n.RUnlock()
+
+	if !n.nopts.FlushEnabled() {
+		n.metrics.flush.ReportSuccess(n.nowFn().Sub(callStart))
+		return nil
+	}
+
+	if !n.nopts.IndexOptions().Enabled() {
+		n.metrics.flushIndex.ReportSuccess(n.nowFn().Sub(callStart))
+		return nil
+	}
+
+	err := n.reverseIndex.Flush(tickStart, flush)
+	n.metrics.flushIndex.ReportSuccessOrError(err, n.nowFn().Sub(callStart))
+	return err
 }
 
 func (n *dbNamespace) Snapshot(blockStart, snapshotTime time.Time, flush persist.DataFlush) error {

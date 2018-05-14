@@ -295,6 +295,12 @@ type databaseNamespace interface {
 		flush persist.DataFlush,
 	) error
 
+	// FlushIndex flushes in-memory index data
+	FlushIndex(
+		tickStart time.Time,
+		flush persist.IndexFlush,
+	) error
+
 	// Snapshot snapshots unflushed in-memory data
 	Snapshot(blockStart, snapshotTime time.Time, flush persist.DataFlush) error
 
@@ -449,6 +455,12 @@ type namespaceIndex interface {
 	// Bootstrap bootstraps the index the provided segments.
 	Bootstrap(
 		bootstrapResults result.IndexResults,
+	) error
+
+	// FlushIndex flushes in-memory index data.
+	Flush(
+		tickStart time.Time,
+		flush persist.IndexFlush,
 	) error
 
 	// Tick performs internal house keeping in the index, including block rotation,

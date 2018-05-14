@@ -208,7 +208,7 @@ func TestShardFlushSeriesFlushError(t *testing.T) {
 		Shard:      s.shard,
 		BlockStart: blockStart,
 	}
-	flush.EXPECT().Prepare(prepareOpts).Return(prepared, nil)
+	flush.EXPECT().PrepareData(prepareOpts).Return(prepared, nil)
 
 	flushed := make(map[int]struct{})
 	for i := 0; i < 2; i++ {
@@ -274,7 +274,7 @@ func TestShardFlushSeriesFlushSuccess(t *testing.T) {
 		Shard:      s.shard,
 		BlockStart: blockStart,
 	}
-	flush.EXPECT().Prepare(prepareOpts).Return(prepared, nil)
+	flush.EXPECT().PrepareData(prepareOpts).Return(prepared, nil)
 
 	flushed := make(map[int]struct{})
 	for i := 0; i < 2; i++ {
@@ -348,7 +348,7 @@ func TestShardSnapshotSeriesSnapshotSuccess(t *testing.T) {
 		SnapshotTime: blockStart,
 		FileSetType:  persist.FileSetSnapshotType,
 	}
-	flush.EXPECT().Prepare(prepareOpts).Return(prepared, nil)
+	flush.EXPECT().PrepareData(prepareOpts).Return(prepared, nil)
 
 	snapshotted := make(map[int]struct{})
 	for i := 0; i < 2; i++ {

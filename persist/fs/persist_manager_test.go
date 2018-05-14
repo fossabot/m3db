@@ -60,7 +60,7 @@ func testManager(
 	require.NoError(t, err)
 
 	manager := mgr.(*persistManager)
-	manager.writer = writer
+	manager.dataPM.writer = writer
 
 	return manager, writer, opts
 }
@@ -84,7 +84,7 @@ func TestPersistenceManagerPrepareDataFileExistsNoDelete(t *testing.T) {
 	require.NoError(t, err)
 
 	defer func() {
-		assert.NoError(t, flush.Done())
+		assert.NoError(t, flush.DoneData())
 	}()
 
 	prepareOpts := persist.DataPrepareOptions{
@@ -92,7 +92,7 @@ func TestPersistenceManagerPrepareDataFileExistsNoDelete(t *testing.T) {
 		Shard:             shard,
 		BlockStart:        blockStart,
 	}
-	prepared, err := flush.Prepare(prepareOpts)
+	prepared, err := flush.PrepareData(prepareOpts)
 	require.Equal(t, errPersistManagerFileSetAlreadyExists, err)
 	require.Nil(t, prepared.Persist)
 	require.Nil(t, prepared.Close)
@@ -128,7 +128,7 @@ func TestPersistenceManagerPrepareDataFileExistsWithDelete(t *testing.T) {
 	require.NoError(t, err)
 
 	defer func() {
-		assert.NoError(t, flush.Done())
+		assert.NoError(t, flush.DoneData())
 	}()
 
 	prepareOpts := persist.DataPrepareOptions{
@@ -137,7 +137,7 @@ func TestPersistenceManagerPrepareDataFileExistsWithDelete(t *testing.T) {
 		BlockStart:        blockStart,
 		DeleteIfExists:    true,
 	}
-	prepared, err := flush.Prepare(prepareOpts)
+	prepared, err := flush.PrepareData(prepareOpts)
 	require.NoError(t, err)
 	require.NotNil(t, prepared.Persist)
 	require.NotNil(t, prepared.Close)
@@ -172,7 +172,7 @@ func TestPersistenceManagerPrepareOpenError(t *testing.T) {
 	require.NoError(t, err)
 
 	defer func() {
-		assert.NoError(t, flush.Done())
+		assert.NoError(t, flush.DoneData())
 	}()
 
 	prepareOpts := persist.DataPrepareOptions{
@@ -180,7 +180,7 @@ func TestPersistenceManagerPrepareOpenError(t *testing.T) {
 		Shard:             shard,
 		BlockStart:        blockStart,
 	}
-	prepared, err := flush.Prepare(prepareOpts)
+	prepared, err := flush.PrepareData(prepareOpts)
 	require.Equal(t, expectedErr, err)
 	require.Nil(t, prepared.Persist)
 	require.Nil(t, prepared.Close)
@@ -220,7 +220,7 @@ func TestPersistenceManagerPrepareSuccess(t *testing.T) {
 	require.NoError(t, err)
 
 	defer func() {
-		assert.NoError(t, flush.Done())
+		assert.NoError(t, flush.DoneData())
 	}()
 
 	now := time.Now()
@@ -233,7 +233,7 @@ func TestPersistenceManagerPrepareSuccess(t *testing.T) {
 		Shard:             shard,
 		BlockStart:        blockStart,
 	}
-	prepared, err := flush.Prepare(prepareOpts)
+	prepared, err := flush.PrepareData(prepareOpts)
 	defer prepared.Close()
 
 	require.Nil(t, err)
@@ -289,13 +289,13 @@ func TestPersistenceManagerNoRateLimit(t *testing.T) {
 	pm.nowFn = func() time.Time { return now }
 	pm.sleepFn = func(d time.Duration) { slept += d }
 
-	writer.EXPECT().WriteAll(id, tags, pm.segmentHolder, checksum).Return(nil).Times(2)
+	writer.EXPECT().WriteAll(id, tags, pm.dataPM.segmentHolder, checksum).Return(nil).Times(2)
 
 	flush, err := pm.StartDataPersist()
 	require.NoError(t, err)
 
 	defer func() {
-		assert.NoError(t, flush.Done())
+		assert.NoError(t, flush.DoneData())
 	}()
 
 	// prepare the flush
@@ -304,7 +304,7 @@ func TestPersistenceManagerNoRateLimit(t *testing.T) {
 		Shard:             shard,
 		BlockStart:        blockStart,
 	}
-	prepared, err := flush.Prepare(prepareOpts)
+	prepared, err := flush.PrepareData(prepareOpts)
 	require.NoError(t, err)
 
 	// Start persistence
@@ -353,7 +353,7 @@ func TestPersistenceManagerWithRateLimit(t *testing.T) {
 		BlockSize: testBlockSize,
 	}
 	writer.EXPECT().Open(writerOpts).Return(nil).Times(iter)
-	writer.EXPECT().WriteAll(id, ident.Tags{}, pm.segmentHolder, checksum).Return(nil).AnyTimes()
+	writer.EXPECT().WriteAll(id, ident.Tags{}, pm.dataPM.segmentHolder, checksum).Return(nil).AnyTimes()
 	writer.EXPECT().Close().Times(iter)
 
 	// Enable rate limiting
@@ -387,7 +387,7 @@ func TestPersistenceManagerWithRateLimit(t *testing.T) {
 			Shard:             shard,
 			BlockStart:        blockStart,
 		}
-		prepared, err := flush.Prepare(prepareOpts)
+		prepared, err := flush.PrepareData(prepareOpts)
 		require.NoError(t, err)
 
 		// Start persistence
@@ -413,7 +413,7 @@ func TestPersistenceManagerWithRateLimit(t *testing.T) {
 
 		require.NoError(t, prepared.Close())
 
-		assert.NoError(t, flush.Done())
+		assert.NoError(t, flush.DoneData())
 	}
 }
 
@@ -431,7 +431,7 @@ func TestPersistenceManagerNamespaceSwitch(t *testing.T) {
 	require.NoError(t, err)
 
 	defer func() {
-		assert.NoError(t, flush.Done())
+		assert.NoError(t, flush.DoneData())
 	}()
 
 	writerOpts := DataWriterOpenOptionsMatcher{
@@ -448,7 +448,7 @@ func TestPersistenceManagerNamespaceSwitch(t *testing.T) {
 		Shard:             shard,
 		BlockStart:        blockStart,
 	}
-	prepared, err := flush.Prepare(prepareOpts)
+	prepared, err := flush.PrepareData(prepareOpts)
 	require.NoError(t, err)
 	require.NotNil(t, prepared.Persist)
 	require.NotNil(t, prepared.Close)
@@ -467,7 +467,7 @@ func TestPersistenceManagerNamespaceSwitch(t *testing.T) {
 		Shard:             shard,
 		BlockStart:        blockStart,
 	}
-	prepared, err = flush.Prepare(prepareOpts)
+	prepared, err = flush.PrepareData(prepareOpts)
 	require.NoError(t, err)
 	require.NotNil(t, prepared.Persist)
 	require.NotNil(t, prepared.Close)

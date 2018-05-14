@@ -244,7 +244,7 @@ func TestPeersSourceIncrementalRun(t *testing.T) {
 		opts = opts.SetDatabaseBlockRetrieverManager(mockRetrieverMgr)
 
 		mockFlush := persist.NewMockDataFlush(ctrl)
-		mockFlush.EXPECT().Done()
+		mockFlush.EXPECT().DoneData()
 		persists := make(map[string]int)
 		closes := make(map[string]int)
 		prepareOpts := persist.DataPrepareOptionsMatcher{
@@ -254,7 +254,7 @@ func TestPeersSourceIncrementalRun(t *testing.T) {
 			DeleteIfExists: true,
 		}
 		mockFlush.EXPECT().
-			Prepare(prepareOpts).
+			PrepareData(prepareOpts).
 			Return(persist.PreparedDataPersist{
 				Persist: func(id ident.ID, _ ident.Tags, segment ts.Segment, checksum uint32) error {
 					persists["foo"]++
@@ -275,7 +275,7 @@ func TestPeersSourceIncrementalRun(t *testing.T) {
 			DeleteIfExists: true,
 		}
 		mockFlush.EXPECT().
-			Prepare(prepareOpts).
+			PrepareData(prepareOpts).
 			Return(persist.PreparedDataPersist{
 				Persist: func(id ident.ID, _ ident.Tags, segment ts.Segment, checksum uint32) error {
 					persists["bar"]++
@@ -296,7 +296,7 @@ func TestPeersSourceIncrementalRun(t *testing.T) {
 			DeleteIfExists: true,
 		}
 		mockFlush.EXPECT().
-			Prepare(prepareOpts).
+			PrepareData(prepareOpts).
 			Return(persist.PreparedDataPersist{
 				Persist: func(id ident.ID, _ ident.Tags, segment ts.Segment, checksum uint32) error {
 					persists["baz"]++
@@ -317,7 +317,7 @@ func TestPeersSourceIncrementalRun(t *testing.T) {
 			DeleteIfExists: true,
 		}
 		mockFlush.EXPECT().
-			Prepare(prepareOpts).
+			PrepareData(prepareOpts).
 			Return(persist.PreparedDataPersist{
 				Persist: func(id ident.ID, _ ident.Tags, segment ts.Segment, checksum uint32) error {
 					assert.Fail(t, "no expected shard 1 second block")
@@ -500,7 +500,7 @@ func TestPeersSourceMarksUnfulfilledOnIncrementalFlushErrors(t *testing.T) {
 	opts = opts.SetDatabaseBlockRetrieverManager(mockRetrieverMgr)
 
 	mockFlush := persist.NewMockDataFlush(ctrl)
-	mockFlush.EXPECT().Done()
+	mockFlush.EXPECT().DoneData()
 
 	persists := make(map[string]int)
 	closes := make(map[string]int)
@@ -513,7 +513,7 @@ func TestPeersSourceMarksUnfulfilledOnIncrementalFlushErrors(t *testing.T) {
 		DeleteIfExists: true,
 	}
 	mockFlush.EXPECT().
-		Prepare(prepareOpts).
+		PrepareData(prepareOpts).
 		Return(persist.PreparedDataPersist{
 			Persist: func(id ident.ID, _ ident.Tags, segment ts.Segment, checksum uint32) error {
 				assert.Fail(t, "not expecting to flush shard 0 at start")
@@ -531,7 +531,7 @@ func TestPeersSourceMarksUnfulfilledOnIncrementalFlushErrors(t *testing.T) {
 		DeleteIfExists: true,
 	}
 	mockFlush.EXPECT().
-		Prepare(prepareOpts).
+		PrepareData(prepareOpts).
 		Return(persist.PreparedDataPersist{
 			Persist: func(id ident.ID, _ ident.Tags, segment ts.Segment, checksum uint32) error {
 				persists["foo"]++
@@ -551,7 +551,7 @@ func TestPeersSourceMarksUnfulfilledOnIncrementalFlushErrors(t *testing.T) {
 		DeleteIfExists: true,
 	}
 	mockFlush.EXPECT().
-		Prepare(prepareOpts).
+		PrepareData(prepareOpts).
 		Return(persist.PreparedDataPersist{
 			Persist: func(id ident.ID, _ ident.Tags, segment ts.Segment, checksum uint32) error {
 				assert.Fail(t, "not expecting to flush shard 0 at start + block size")
@@ -569,7 +569,7 @@ func TestPeersSourceMarksUnfulfilledOnIncrementalFlushErrors(t *testing.T) {
 		DeleteIfExists: true,
 	}
 	mockFlush.EXPECT().
-		Prepare(prepareOpts).
+		PrepareData(prepareOpts).
 		Return(persist.PreparedDataPersist{
 			Persist: func(id ident.ID, _ ident.Tags, segment ts.Segment, checksum uint32) error {
 				persists["bar"]++
@@ -589,7 +589,7 @@ func TestPeersSourceMarksUnfulfilledOnIncrementalFlushErrors(t *testing.T) {
 		DeleteIfExists: true,
 	}
 	mockFlush.EXPECT().
-		Prepare(prepareOpts).
+		PrepareData(prepareOpts).
 		Return(persist.PreparedDataPersist{
 			Persist: func(id ident.ID, _ ident.Tags, segment ts.Segment, checksum uint32) error {
 				persists["baz"]++
@@ -607,7 +607,7 @@ func TestPeersSourceMarksUnfulfilledOnIncrementalFlushErrors(t *testing.T) {
 		DeleteIfExists: true,
 	}
 	mockFlush.EXPECT().
-		Prepare(prepareOpts).
+		PrepareData(prepareOpts).
 		Return(persist.PreparedDataPersist{
 			Persist: func(id ident.ID, _ ident.Tags, segment ts.Segment, checksum uint32) error {
 				persists["baz"]++
@@ -627,7 +627,7 @@ func TestPeersSourceMarksUnfulfilledOnIncrementalFlushErrors(t *testing.T) {
 		DeleteIfExists: true,
 	}
 	mockFlush.EXPECT().
-		Prepare(prepareOpts).
+		PrepareData(prepareOpts).
 		Return(persist.PreparedDataPersist{
 			Persist: func(id ident.ID, _ ident.Tags, segment ts.Segment, checksum uint32) error {
 				persists["qux"]++
@@ -645,7 +645,7 @@ func TestPeersSourceMarksUnfulfilledOnIncrementalFlushErrors(t *testing.T) {
 		DeleteIfExists: true,
 	}
 	mockFlush.EXPECT().
-		Prepare(prepareOpts).
+		PrepareData(prepareOpts).
 		Return(persist.PreparedDataPersist{
 			Persist: func(id ident.ID, _ ident.Tags, segment ts.Segment, checksum uint32) error {
 				persists["qux"]++

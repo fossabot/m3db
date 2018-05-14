@@ -26,6 +26,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/m3db/m3db/persist"
 	m3ninxindex "github.com/m3db/m3ninx/index"
 	"github.com/m3db/m3ninx/index/segment"
 	"github.com/m3db/m3ninx/index/segment/mem"
@@ -61,9 +62,15 @@ type newExecutorFn func() (search.Executor, error)
 
 type block struct {
 	sync.RWMutex
-	state                blockState
-	bootstrappedSegments []segment.Segment
-	segment              segment.MutableSegment
+	state      blockState
+	needsFlush bool
+
+	closers                 []persist.Closer
+	immutableSegments       []segment.Segment
+	inactiveMutableSegments []segment.MutableSegment
+
+	activeSegment segment.MutableSegment
+	writeBatch    m3ninxindex.Batch
 
 	newExecutorFn newExecutorFn
 	startTime     time.Time
@@ -87,8 +94,13 @@ func NewBlock(
 	}
 
 	b := &block{
-		state:     blockStateOpen,
-		segment:   seg,
+		state:         blockStateOpen,
+		needsFlush:    true,
+		activeSegment: seg,
+		writeBatch: m3ninxindex.Batch{
+			AllowPartialUpdates: true,
+		},
+
 		startTime: startTime,
 		endTime:   startTime.Add(blockSize),
 		blockSize: blockSize,
@@ -111,7 +123,7 @@ func (b *block) WriteBatch(inserts *WriteBatch) (WriteBatchResult, error) {
 	b.Lock()
 	defer b.Unlock()
 
-	if b.state != blockStateOpen {
+	if b.state != blockStateOpen || b.activeSegment == nil {
 		err := b.writeBatchErrorInvalidState(b.state)
 		inserts.MarkUnmarkedEntriesError(err)
 		return WriteBatchResult{
@@ -119,7 +131,7 @@ func (b *block) WriteBatch(inserts *WriteBatch) (WriteBatchResult, error) {
 		}, err
 	}
 
-	err := b.segment.InsertBatch(m3ninxindex.Batch{
+	err := b.activeSegment.InsertBatch(m3ninxindex.Batch{
 		Docs:                inserts.PendingDocs(),
 		AllowPartialUpdates: true,
 	})
@@ -154,7 +166,7 @@ func (b *block) WriteBatch(inserts *WriteBatch) (WriteBatchResult, error) {
 
 func (b *block) executorWithRLock() (search.Executor, error) {
 	var (
-		readers = make([]m3ninxindex.Reader, 0, 1+len(b.bootstrappedSegments))
+		readers = make([]m3ninxindex.Reader, 0, 1+len(b.inactiveMutableSegments)+len(b.immutableSegments))
 		success = false
 	)
 
@@ -168,14 +180,25 @@ func (b *block) executorWithRLock() (search.Executor, error) {
 	}()
 
 	// start with the actively written to segment
-	reader, err := b.segment.Reader()
-	if err != nil {
-		return nil, err
+	if b.activeSegment != nil {
+		reader, err := b.activeSegment.Reader()
+		if err != nil {
+			return nil, err
+		}
+		readers = append(readers, reader)
 	}
-	readers = append(readers, reader)
 
-	// include all bootstrapped segments
-	for _, seg := range b.bootstrappedSegments {
+	// include all immutable segments
+	for _, seg := range b.immutableSegments {
+		reader, err := seg.Reader()
+		if err != nil {
+			return nil, err
+		}
+		readers = append(readers, reader)
+	}
+
+	// include all inactiveMutable segments
+	for _, seg := range b.inactiveMutableSegments {
 		reader, err := seg.Reader()
 		if err != nil {
 			return nil, err
@@ -280,8 +303,91 @@ func (b *block) Bootstrap(
 		return errUnableToBootstrapBlockClosed
 	}
 
-	b.bootstrappedSegments = append(b.bootstrappedSegments, segments...)
+	for _, seg := range segments {
+		switch x := seg.(type) {
+		case segment.MutableSegment:
+			b.inactiveMutableSegments = append(b.inactiveMutableSegments, x)
+		default:
+			b.immutableSegments = append(b.immutableSegments, x)
+		}
+	}
 	return nil
+}
+
+func (b *block) Flush(flush persist.PreparedIndexPersist) error {
+	b.RLock()
+	defer b.RUnlock()
+	if b.state != blockStateSealed {
+		return fmt.Errorf("unable to flush block in state: %v", b.state)
+	}
+
+	if !b.needsFlush {
+		return nil
+	}
+
+	// merge all mutable blocks
+	if err := mem.Merge(b.activeSegment, b.inactiveMutableSegments...); err != nil {
+		return err
+	}
+
+	// remove all in-active mutable segments
+	// TODO(prateek): should this be done during ticking?
+	if err := b.evictInactiveMutableSegmentsWithRLock(); err != nil {
+		return err
+	}
+
+	// actually flush the data
+	if err := flush.Persist(b.activeSegment); err != nil {
+		return err
+	}
+
+	segments, closer, err := flush.Close()
+	if err != nil {
+		return err
+	}
+
+	b.updateSegmentsWithRLock(segments, closer, true)
+
+	b.needsFlush = false
+	return nil
+}
+
+func (b *block) updateSegmentsWithRLock(segments []segment.Segment, closer persist.Closer, invalidateActive bool) {
+	b.RUnlock()
+	b.Lock()
+
+	defer func() {
+		b.Unlock()
+		b.Lock()
+	}()
+
+	b.immutableSegments = append(b.immutableSegments, segments...)
+	b.closers = append(b.closers, closer)
+
+	if invalidateActive {
+		// deliberately choosing to skip error here <- is that kohser?
+		b.activeSegment.Close()
+		b.activeSegment = nil
+	}
+
+}
+
+func (b *block) evictInactiveMutableSegmentsWithRLock() error {
+	b.RUnlock()
+	b.Lock()
+
+	defer func() {
+		b.Unlock()
+		b.Lock()
+	}()
+
+	var multiErr xerrors.MultiError
+	for _, s := range b.inactiveMutableSegments {
+		multiErr = multiErr.Add(s.Close())
+	}
+	b.inactiveMutableSegments = nil
+
+	return multiErr.FinalError()
 }
 
 func (b *block) Tick(c context.Cancellable) (BlockTickResult, error) {
@@ -293,11 +399,18 @@ func (b *block) Tick(c context.Cancellable) (BlockTickResult, error) {
 	}
 
 	// active segment
-	result.NumSegments++
-	result.NumDocs += b.segment.Size()
+	if b.activeSegment != nil {
+		result.NumSegments++
+		result.NumDocs += b.activeSegment.Size()
+	}
 
-	// bootstrapped segments
-	for _, seg := range b.bootstrappedSegments {
+	// other segments
+	for _, seg := range b.inactiveMutableSegments {
+		result.NumSegments++
+		result.NumDocs += seg.Size()
+	}
+
+	for _, seg := range b.immutableSegments {
 		result.NumSegments++
 		result.NumDocs += seg.Size()
 	}
@@ -330,11 +443,27 @@ func (b *block) Close() error {
 	b.state = blockStateClosed
 
 	var multiErr xerrors.MultiError
-	multiErr = multiErr.Add(b.segment.Close())
-	for _, seg := range b.bootstrappedSegments {
+
+	if b.activeSegment != nil {
+		multiErr = multiErr.Add(b.activeSegment.Close())
+	}
+	b.activeSegment = nil
+
+	for _, seg := range b.inactiveMutableSegments {
 		multiErr = multiErr.Add(seg.Close())
 	}
-	b.bootstrappedSegments = nil
+	b.inactiveMutableSegments = nil
+
+	for _, seg := range b.immutableSegments {
+		multiErr = multiErr.Add(seg.Close())
+	}
+	b.immutableSegments = nil
+
+	for _, c := range b.closers {
+		multiErr = multiErr.Add(c())
+	}
+	b.closers = nil
+
 	return multiErr.FinalError()
 }
 
