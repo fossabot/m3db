@@ -31,6 +31,7 @@ import (
 	"github.com/m3db/m3db/src/dbnode/retention"
 	"github.com/m3db/m3db/src/dbnode/storage/namespace"
 	"github.com/m3db/m3x/ident"
+	xtest "github.com/m3db/m3x/test"
 
 	"github.com/golang/mock/gomock"
 	"github.com/stretchr/testify/require"
@@ -57,7 +58,7 @@ func newMultipleFlushManagerNeedsFlush(t *testing.T, ctrl *gomock.Controller) (
 }
 
 func TestFlushManagerFlushAlreadyInProgress(t *testing.T) {
-	ctrl := gomock.NewController(t)
+	ctrl := gomock.NewController(xtest.Reporter{t})
 	defer ctrl.Finish()
 
 	startCh := make(chan struct{}, 1)
@@ -68,13 +69,17 @@ func TestFlushManagerFlushAlreadyInProgress(t *testing.T) {
 	}()
 
 	mockFlusher := persist.NewMockDataFlush(ctrl)
-	mockFlusher.EXPECT().Done().Return(nil).AnyTimes()
+	mockFlusher.EXPECT().DoneData().Return(nil).AnyTimes()
 	mockPersistManager := persist.NewMockManager(ctrl)
 	mockPersistManager.EXPECT().StartDataPersist().Do(func() {
 		// channels used to coordinate flushing state
 		startCh <- struct{}{}
 		<-doneCh
 	}).Return(mockFlusher, nil).AnyTimes()
+
+	mockIndexFlusher := persist.NewMockIndexFlush(ctrl)
+	mockIndexFlusher.EXPECT().DoneIndex().Return(nil).AnyTimes()
+	mockPersistManager.EXPECT().StartIndexPersist().Return(mockIndexFlusher, nil).AnyTimes()
 
 	testOpts := testDatabaseOptions().SetPersistManager(mockPersistManager)
 	db := newMockdatabase(ctrl)
@@ -98,7 +103,7 @@ func TestFlushManagerFlushAlreadyInProgress(t *testing.T) {
 	go func() {
 		defer wg.Done()
 		<-startCh
-		require.Equal(t, errFlushOrSnapshotAlreadyInProgress, fm.Flush(now, DatabaseBootstrapState{}))
+		require.Equal(t, errFlushOperationsInProgress, fm.Flush(now, DatabaseBootstrapState{}))
 		doneCh <- struct{}{}
 	}()
 
@@ -111,9 +116,13 @@ func TestFlushManagerFlushDoneError(t *testing.T) {
 
 	fakeErr := errors.New("fake error while marking flush done")
 	mockFlusher := persist.NewMockDataFlush(ctrl)
-	mockFlusher.EXPECT().Done().Return(fakeErr).AnyTimes()
+	mockFlusher.EXPECT().DoneData().Return(fakeErr).AnyTimes()
 	mockPersistManager := persist.NewMockManager(ctrl)
 	mockPersistManager.EXPECT().StartDataPersist().Return(mockFlusher, nil).AnyTimes()
+
+	mockIndexFlusher := persist.NewMockIndexFlush(ctrl)
+	mockIndexFlusher.EXPECT().DoneIndex().Return(nil).AnyTimes()
+	mockPersistManager.EXPECT().StartIndexPersist().Return(mockIndexFlusher, nil).AnyTimes()
 
 	testOpts := testDatabaseOptions().SetPersistManager(mockPersistManager)
 	db := newMockdatabase(ctrl)

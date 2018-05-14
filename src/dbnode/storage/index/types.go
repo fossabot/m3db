@@ -26,6 +26,7 @@ import (
 	"time"
 
 	"github.com/m3db/m3db/src/dbnode/clock"
+	"github.com/m3db/m3db/src/dbnode/persist"
 	"github.com/m3db/m3ninx/doc"
 	"github.com/m3db/m3ninx/idx"
 	"github.com/m3db/m3ninx/index/segment"
@@ -155,6 +156,9 @@ type Block interface {
 
 	// Tick does internal house keeping operations.
 	Tick(c context.Cancellable) (BlockTickResult, error)
+
+	// Flush flushes data for the block.
+	Flush(flush persist.IndexFlush) error
 
 	// Seal prevents the block from taking any more writes, but, it still permits
 	// addition of segments via Bootstrap().

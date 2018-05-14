@@ -28,6 +28,7 @@ import (
 	"reflect"
 	"time"
 
+	"github.com/m3db/m3db/src/dbnode/persist"
 	"github.com/m3db/m3ninx/doc"
 	"github.com/m3db/m3ninx/index/segment"
 	"github.com/m3db/m3x/context"
@@ -187,6 +188,18 @@ func (m *MockBlock) EndTime() time.Time {
 // EndTime indicates an expected call of EndTime
 func (mr *MockBlockMockRecorder) EndTime() *gomock.Call {
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "EndTime", reflect.TypeOf((*MockBlock)(nil).EndTime))
+}
+
+// Flush mocks base method
+func (m *MockBlock) Flush(arg0 persist.IndexFlush) error {
+	ret := m.ctrl.Call(m, "Flush", arg0)
+	ret0, _ := ret[0].(error)
+	return ret0
+}
+
+// Flush indicates an expected call of Flush
+func (mr *MockBlockMockRecorder) Flush(arg0 interface{}) *gomock.Call {
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Flush", reflect.TypeOf((*MockBlock)(nil).Flush), arg0)
 }
 
 // IsSealed mocks base method

@@ -209,7 +209,7 @@ func TestShardFlushSeriesFlushError(t *testing.T) {
 		Shard:      s.shard,
 		BlockStart: blockStart,
 	}
-	flush.EXPECT().Prepare(prepareOpts).Return(prepared, nil)
+	flush.EXPECT().PrepareData(prepareOpts).Return(prepared, nil)
 
 	flushed := make(map[int]struct{})
 	for i := 0; i < 2; i++ {
@@ -223,7 +223,7 @@ func TestShardFlushSeriesFlushError(t *testing.T) {
 		curr.EXPECT().IsEmpty().Return(false).AnyTimes()
 		curr.EXPECT().
 			Flush(gomock.Any(), blockStart, gomock.Any()).
-			Do(func(context.Context, time.Time, persist.Fn) {
+			Do(func(context.Context, time.Time, persist.DataFn) {
 				flushed[i] = struct{}{}
 			}).
 			Return(series.FlushOutcomeErr, expectedErr)
@@ -275,7 +275,7 @@ func TestShardFlushSeriesFlushSuccess(t *testing.T) {
 		Shard:      s.shard,
 		BlockStart: blockStart,
 	}
-	flush.EXPECT().Prepare(prepareOpts).Return(prepared, nil)
+	flush.EXPECT().PrepareData(prepareOpts).Return(prepared, nil)
 
 	flushed := make(map[int]struct{})
 	for i := 0; i < 2; i++ {
@@ -285,7 +285,7 @@ func TestShardFlushSeriesFlushSuccess(t *testing.T) {
 		curr.EXPECT().IsEmpty().Return(false).AnyTimes()
 		curr.EXPECT().
 			Flush(gomock.Any(), blockStart, gomock.Any()).
-			Do(func(context.Context, time.Time, persist.Fn) {
+			Do(func(context.Context, time.Time, persist.DataFn) {
 				flushed[i] = struct{}{}
 			}).
 			Return(series.FlushOutcomeFlushedToDisk, nil)
@@ -351,7 +351,7 @@ func TestShardSnapshotSeriesSnapshotSuccess(t *testing.T) {
 			SnapshotTime: blockStart,
 		},
 	}
-	flush.EXPECT().Prepare(prepareOpts).Return(prepared, nil)
+	flush.EXPECT().PrepareData(prepareOpts).Return(prepared, nil)
 
 	snapshotted := make(map[int]struct{})
 	for i := 0; i < 2; i++ {
@@ -361,7 +361,7 @@ func TestShardSnapshotSeriesSnapshotSuccess(t *testing.T) {
 		series.EXPECT().IsEmpty().Return(false).AnyTimes()
 		series.EXPECT().
 			Snapshot(gomock.Any(), blockStart, gomock.Any()).
-			Do(func(context.Context, time.Time, persist.Fn) {
+			Do(func(context.Context, time.Time, persist.DataFn) {
 				snapshotted[i] = struct{}{}
 			}).
 			Return(nil)

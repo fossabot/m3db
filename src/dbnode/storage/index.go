@@ -28,6 +28,7 @@ import (
 	"time"
 
 	"github.com/m3db/m3db/src/dbnode/clock"
+	"github.com/m3db/m3db/src/dbnode/persist"
 	"github.com/m3db/m3db/src/dbnode/retention"
 	"github.com/m3db/m3db/src/dbnode/storage/bootstrap/result"
 	m3dberrors "github.com/m3db/m3db/src/dbnode/storage/errors"
@@ -48,6 +49,7 @@ var (
 	errDbIndexAlreadyClosed               = errors.New("database index has already been closed")
 	errDbIndexUnableToWriteClosed         = errors.New("unable to write to database index, already closed")
 	errDbIndexUnableToQueryClosed         = errors.New("unable to query database index, already closed")
+	errDbIndexUnableToFlushClosed         = errors.New("unable to flush database index, already closed")
 	errDbIndexTerminatingTickCancellation = errors.New("terminating tick early due to cancellation")
 	errDbIndexIsBootstrapping             = errors.New("index is already bootstrapping")
 )
@@ -103,7 +105,7 @@ type nsIndexRuntimeOptions struct {
 	maxQueryLimit int64
 }
 
-type newBlockFn func(time.Time, time.Duration, index.Options) (index.Block, error)
+type newBlockFn func(time.Time, namespace.Metadata, index.Options) (index.Block, error)
 
 // newNamespaceIndex returns a new namespaceIndex for the provided namespace.
 func newNamespaceIndex(
@@ -457,6 +459,31 @@ func (i *nsIndex) Tick(c context.Cancellable) (namespaceIndexTickResult, error) 
 	return result, multiErr.FinalError()
 }
 
+func (i *nsIndex) Flush(
+	tickStart time.Time,
+	flush persist.IndexFlush,
+) error {
+	i.state.RLock()
+	defer i.state.RUnlock()
+	if !i.isOpenWithRLock() {
+		return errDbIndexUnableToFlushClosed
+	}
+
+	var (
+		lastFlushableBlockStart = retention.FlushTimeEndForBlockSize(i.blockSize, tickStart.Add(-i.bufferPast))
+		multiErr                xerrors.MultiError
+	)
+
+	for blockStart, block := range i.state.blocksByTime {
+		// flush any blocks that are flushable
+		if !blockStart.ToTime().After(lastFlushableBlockStart) && block.IsSealed() {
+			multiErr = multiErr.Add(block.Flush(flush))
+		}
+	}
+
+	return multiErr.FinalError()
+}
+
 func (i *nsIndex) Query(
 	ctx context.Context,
 	query index.Query,
@@ -573,7 +600,7 @@ func (i *nsIndex) ensureBlockPresentWithRLock(blockStart time.Time) (index.Block
 	}
 
 	// ok now we know for sure we have to alloc
-	block, err := i.newBlockFn(blockStart, i.blockSize, i.opts)
+	block, err := i.newBlockFn(blockStart, i.nsMetadata, i.opts)
 	if err != nil { // unable to allocate the block, should never happen.
 		return nil, i.unableToAllocBlockInvariantError(err)
 	}
