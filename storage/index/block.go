@@ -358,7 +358,7 @@ func (b *block) updateSegmentsWithRLock(segments []segment.Segment, closer persi
 
 	defer func() {
 		b.Unlock()
-		b.Lock()
+		b.RLock()
 	}()
 
 	b.immutableSegments = append(b.immutableSegments, segments...)
@@ -378,7 +378,7 @@ func (b *block) evictInactiveMutableSegmentsWithRLock() error {
 
 	defer func() {
 		b.Unlock()
-		b.Lock()
+		b.RLock()
 	}()
 
 	var multiErr xerrors.MultiError
