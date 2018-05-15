@@ -356,9 +356,9 @@ func (s *dbShard) OnRetrieveBlock(
 
 	// NB(r): Do not need to specify that needs to be indexed as series would
 	// have been already been indexed when it was written
-	copiedID := entry.series.ID()
+	copiedID := entry.Series.ID()
 	copiedTagsIter := s.identifierPool.TagsIterator()
-	copiedTagsIter.Reset(entry.series.Tags())
+	copiedTagsIter.Reset(entry.Series.Tags())
 	s.insertQueue.Insert(dbShardInsert{
 		entry: entry,
 		opts: dbShardInsertAsyncOptions{
@@ -1697,7 +1697,7 @@ func (s *dbShard) Bootstrap(
 		dbBlocks.Tags.Finalize()
 
 		// Cannot close blocks once done as series takes ref to these
-		bsResult, err := entry.series.Bootstrap(dbBlocks.Blocks)
+		bsResult, err := entry.Series.Bootstrap(dbBlocks.Blocks)
 		if err != nil {
 			multiErr = multiErr.Add(err)
 		}
