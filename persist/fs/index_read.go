@@ -228,11 +228,14 @@ func (r *indexReader) ReadSegmentFileSet() (
 			return nil, err
 		}
 
+		println(fmt.Sprintf("%+v", mmapResult))
 		if warning := mmapResult.Warning; warning != nil {
 			r.logger.Warnf("warning while mmapping files in reader: %s",
 				warning.Error())
 		}
 
+		println(fmt.Sprintf("filePath: %v, len-bytes: %+v, cap-bytes: %+v", filePath, len(bytes), cap(bytes)))
+		println(fmt.Sprintf("bytes: %+v", bytes))
 		file := newReadableIndexSegmentFileMmap(segFileType, fd, bytes)
 		result.files = append(result.files, file)
 		digests.files = append(digests.files, indexReaderReadSegmentFileDigest{

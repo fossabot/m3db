@@ -424,6 +424,11 @@ func (b *block) Seal() error {
 	if b.state != blockStateOpen {
 		return fmt.Errorf(errUnableToSealBlockIllegalStateFmtString, b.state)
 	}
+	if b.activeSegment != nil {
+		if _, err := b.activeSegment.Seal(); err != nil {
+			return err
+		}
+	}
 	b.state = blockStateSealed
 	return nil
 }
