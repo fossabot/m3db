@@ -605,6 +605,7 @@ func (b *dbBufferBucket) write(
 		}
 	}
 	if idx == -1 {
+		b.opts.Stats().IncCreatedEncoders()
 		bopts := b.opts.DatabaseBlockOptions()
 		blockSize := b.opts.RetentionOptions().BlockSize()
 		blockAllocSize := bopts.DatabaseBlockAllocSize()
