@@ -281,9 +281,7 @@ func (pm *persistManager) closeIndex() ([]segment.Segment, io.Closer, error) {
 			return nil, nil, err
 		}
 
-		seg, err := m3ninxpersist.NewSegment(fileset, m3ninxfs.NewSegmentOpts{
-			PostingsListPool: pm.opts.PostingsListPool(),
-		})
+		seg, err := m3ninxpersist.NewSegment(fileset, m3ninxfs.NewOptions())
 		if err != nil {
 			return nil, nil, err
 		}
