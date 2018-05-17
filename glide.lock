@@ -229,7 +229,7 @@ imports:
   - metric
   - policy
 - name: github.com/m3db/m3ninx
-  version: c49361b96d3af92846915b37c3a6781e51ecec44
+  version: cc6eb8896196dd0b97b6a41a5b5ccecc434a06f8
   subpackages:
   - doc
   - generated/proto/fswriter
