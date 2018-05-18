@@ -85,14 +85,14 @@ func TestPersistenceManagerPrepareDataFileExistsWithDelete(t *testing.T) {
 	shard := uint32(0)
 	blockStart := time.Unix(1000, 0)
 
-	writerOpts := dataWriterOpenOptionsMatcher{DataWriterOpenOptions{
+	writerOpts := xtest.CmpMatcher(DataWriterOpenOptions{
 		Identifier: FileSetFileIdentifier{
 			Namespace:  testNs1ID,
 			Shard:      shard,
 			BlockStart: blockStart,
 		},
 		BlockSize: testBlockSize,
-	}}
+	})
 	writer.EXPECT().Open(writerOpts).Return(nil)
 
 	shardDir := createDataShardDir(t, pm.filePathPrefix, testNs1ID, shard)
@@ -135,14 +135,14 @@ func TestPersistenceManagerPrepareOpenError(t *testing.T) {
 	blockStart := time.Unix(1000, 0)
 	expectedErr := errors.New("foo")
 
-	writerOpts := dataWriterOpenOptionsMatcher{DataWriterOpenOptions{
+	writerOpts := xtest.CmpMatcher(DataWriterOpenOptions{
 		Identifier: FileSetFileIdentifier{
 			Namespace:  testNs1ID,
 			Shard:      shard,
 			BlockStart: blockStart,
 		},
 		BlockSize: testBlockSize,
-	}}
+	})
 	writer.EXPECT().Open(writerOpts).Return(expectedErr)
 
 	flush, err := pm.StartDataPersist()
@@ -172,14 +172,14 @@ func TestPersistenceManagerPrepareSuccess(t *testing.T) {
 
 	shard := uint32(0)
 	blockStart := time.Unix(1000, 0)
-	writerOpts := dataWriterOpenOptionsMatcher{DataWriterOpenOptions{
+	writerOpts := xtest.CmpMatcher(DataWriterOpenOptions{
 		Identifier: FileSetFileIdentifier{
 			Namespace:  testNs1ID,
 			Shard:      shard,
 			BlockStart: blockStart,
 		},
 		BlockSize: testBlockSize,
-	}}
+	})
 	writer.EXPECT().Open(writerOpts).Return(nil)
 
 	var (
@@ -268,7 +268,7 @@ func TestPersistenceManagerPrepareIndexFileExists(t *testing.T) {
 		NamespaceMetadata: testNs1Metadata(t),
 		BlockStart:        blockStart,
 	}
-	writer.EXPECT().Open(indexWriterOpenOptionsMatcher{
+	writer.EXPECT().Open(xtest.CmpMatcher(
 		IndexWriterOpenOptions{
 			BlockSize: testBlockSize,
 			Identifier: FileSetFileIdentifier{
@@ -278,7 +278,7 @@ func TestPersistenceManagerPrepareIndexFileExists(t *testing.T) {
 				VolumeIndex:        1,
 			},
 		},
-	}).Return(nil)
+	)).Return(nil)
 	prepared, err := flush.PrepareIndex(prepareOpts)
 	require.NoError(t, err)
 	require.NotNil(t, prepared.Persist)
@@ -296,14 +296,14 @@ func TestPersistenceManagerPrepareIndexOpenError(t *testing.T) {
 	blockStart := time.Unix(1000, 0)
 	expectedErr := errors.New("foo")
 
-	writerOpts := indexWriterOpenOptionsMatcher{IndexWriterOpenOptions{
+	writerOpts := xtest.CmpMatcher(IndexWriterOpenOptions{
 		Identifier: FileSetFileIdentifier{
 			FileSetContentType: persist.FileSetIndexContentType,
 			Namespace:          testNs1ID,
 			BlockStart:         blockStart,
 		},
 		BlockSize: testBlockSize,
-	}}
+	})
 	writer.EXPECT().Open(writerOpts).Return(expectedErr)
 
 	flush, err := pm.StartIndexPersist()
@@ -332,15 +332,15 @@ func TestPersistenceManagerPrepareIndexSuccess(t *testing.T) {
 	defer os.RemoveAll(pm.filePathPrefix)
 
 	blockStart := time.Unix(1000, 0)
-	writerOpts := indexWriterOpenOptionsMatcher{IndexWriterOpenOptions{
+	writerOpts := IndexWriterOpenOptions{
 		Identifier: FileSetFileIdentifier{
 			FileSetContentType: persist.FileSetIndexContentType,
 			Namespace:          testNs1ID,
 			BlockStart:         blockStart,
 		},
 		BlockSize: testBlockSize,
-	}}
-	writer.EXPECT().Open(writerOpts).Return(nil)
+	}
+	writer.EXPECT().Open(xtest.CmpMatcher(writerOpts)).Return(nil)
 
 	flush, err := pm.StartIndexPersist()
 	require.NoError(t, err)
@@ -367,9 +367,9 @@ func TestPersistenceManagerPrepareIndexSuccess(t *testing.T) {
 		return reader, nil
 	}
 
-	reader.EXPECT().Open(indexReaderOpenOptionsMatcher{IndexReaderOpenOptions{
+	reader.EXPECT().Open(xtest.CmpMatcher(IndexReaderOpenOptions{
 		Identifier: writerOpts.Identifier,
-	}}).Return(nil)
+	})).Return(nil)
 
 	file := NewMockIndexSegmentFile(ctrl)
 	gomock.InOrder(
@@ -401,14 +401,14 @@ func TestPersistenceManagerNoRateLimit(t *testing.T) {
 
 	shard := uint32(0)
 	blockStart := time.Unix(1000, 0)
-	writerOpts := dataWriterOpenOptionsMatcher{DataWriterOpenOptions{
+	writerOpts := xtest.CmpMatcher(DataWriterOpenOptions{
 		Identifier: FileSetFileIdentifier{
 			Namespace:  testNs1ID,
 			Shard:      shard,
 			BlockStart: blockStart,
 		},
 		BlockSize: testBlockSize,
-	}}
+	})
 	writer.EXPECT().Open(writerOpts).Return(nil)
 
 	var (
@@ -480,14 +480,14 @@ func TestPersistenceManagerWithRateLimit(t *testing.T) {
 	pm.nowFn = func() time.Time { return now }
 	pm.sleepFn = func(d time.Duration) { slept += d }
 
-	writerOpts := dataWriterOpenOptionsMatcher{DataWriterOpenOptions{
+	writerOpts := xtest.CmpMatcher(DataWriterOpenOptions{
 		Identifier: FileSetFileIdentifier{
 			Namespace:  testNs1ID,
 			Shard:      shard,
 			BlockStart: blockStart,
 		},
 		BlockSize: testBlockSize,
-	}}
+	})
 	writer.EXPECT().Open(writerOpts).Return(nil).Times(iter)
 	writer.EXPECT().WriteAll(id, ident.Tags{}, pm.dataPM.segmentHolder, checksum).Return(nil).AnyTimes()
 	writer.EXPECT().Close().Times(iter)
@@ -570,14 +570,14 @@ func TestPersistenceManagerNamespaceSwitch(t *testing.T) {
 		assert.NoError(t, flush.DoneData())
 	}()
 
-	writerOpts := dataWriterOpenOptionsMatcher{DataWriterOpenOptions{
+	writerOpts := xtest.CmpMatcher(DataWriterOpenOptions{
 		Identifier: FileSetFileIdentifier{
 			Namespace:  testNs1ID,
 			Shard:      shard,
 			BlockStart: blockStart,
 		},
 		BlockSize: testBlockSize,
-	}}
+	})
 	writer.EXPECT().Open(writerOpts).Return(nil)
 	prepareOpts := persist.DataPrepareOptions{
 		NamespaceMetadata: testNs1Metadata(t),
@@ -589,14 +589,14 @@ func TestPersistenceManagerNamespaceSwitch(t *testing.T) {
 	require.NotNil(t, prepared.Persist)
 	require.NotNil(t, prepared.Close)
 
-	writerOpts = dataWriterOpenOptionsMatcher{DataWriterOpenOptions{
+	writerOpts = xtest.CmpMatcher(DataWriterOpenOptions{
 		Identifier: FileSetFileIdentifier{
 			Namespace:  testNs2ID,
 			Shard:      shard,
 			BlockStart: blockStart,
 		},
 		BlockSize: testBlockSize,
-	}}
+	})
 	writer.EXPECT().Open(writerOpts).Return(nil)
 	prepareOpts = persist.DataPrepareOptions{
 		NamespaceMetadata: testNs2Metadata(t),

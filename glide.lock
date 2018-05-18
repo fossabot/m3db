@@ -1,5 +1,5 @@
-hash: 1a1586ee08127ed6155a09e5b0168f15d8c743346495be938bc9e078715a29a3
-updated: 2018-05-18T03:27:45.737665704-04:00
+hash: 3676152b21215fe5cbdc6bc36a93d072d1c0181d21ab75d1a8debd6015ee44c3
+updated: 2018-05-18T11:34:59.456603862-04:00
 imports:
 - name: github.com/apache/thrift
   version: 53dd39833a08ce33582e5ff31fa18bb4735d6731
@@ -157,7 +157,7 @@ imports:
 - name: github.com/google/btree
   version: 925471ac9e2131377a91e1595defec898166fe49
 - name: github.com/google/go-cmp
-  version: 5411ab924f9ffa6566244a9e504bc347edacffd3
+  version: 3af367b6b30c263d47e8895973edcca9a49cf029
   subpackages:
   - cmp
   - cmp/internal/diff
@@ -253,7 +253,7 @@ imports:
   - search/searcher
   - x
 - name: github.com/m3db/m3x
-  version: 5b90159b38cdf9a636a4de6fd601fb204429ad4b
+  version: c457e96f2dea19cf2f590e40d443b62ced1e7820
   vcs: git
   subpackages:
   - checked
