@@ -47,6 +47,7 @@ import (
 	"github.com/m3db/m3x/resource"
 	xtime "github.com/m3db/m3x/time"
 
+	"github.com/apache/thrift/lib/go/thrift"
 	"github.com/uber-go/tally"
 	"github.com/uber/tchannel-go/thrift"
 )
@@ -931,6 +932,13 @@ func (s *service) WriteTaggedBatchRaw(tctx thrift.Context, req *rpc.WriteTaggedB
 	callStart := s.nowFn()
 	ctx := tchannelthrift.Context(tctx)
 
+	ctx.RegisterFinalizer(resource.FinalizerFn(func() {
+		for _, elem := range req.Elements {
+			thrift.BytesPool.Put(elem.ID)
+			thrift.BytesPool.Put(elem.EncodedTags)
+		}
+	}))
+
 	nsID := s.newID(ctx, req.NameSpace)
 
 	var (
@@ -1152,8 +1160,7 @@ func (s *service) isOverloaded() bool {
 }
 
 func (s *service) newID(ctx context.Context, id []byte) ident.ID {
-	checkedBytes := s.pools.checkedBytesWrapper.Get(id)
-	return s.pools.id.GetBinaryID(ctx, checkedBytes)
+	return ident.BytesID(id)
 }
 
 func (s *service) readEncoded(
