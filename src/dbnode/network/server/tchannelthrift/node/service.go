@@ -1152,8 +1152,7 @@ func (s *service) isOverloaded() bool {
 }
 
 func (s *service) newID(ctx context.Context, id []byte) ident.ID {
-	checkedBytes := s.pools.checkedBytesWrapper.Get(id)
-	return s.pools.id.GetBinaryID(ctx, checkedBytes)
+	return ident.BytesID(id)
 }
 
 func (s *service) readEncoded(
