@@ -2,7 +2,7 @@ hash: 60f4723204ab6c6d91837aa4536de2da2bd88025312b2b68cfdbfd63c95fde79
 updated: 2018-05-20T01:46:46.6347667-04:00
 imports:
 - name: github.com/apache/thrift
-  version: f463e791bc1c708f66fc05b5e73c88d9722dcd97
+  version: e80f28ecc4f2a621b79e001ba7075cbdbeff3f24
   repo: https://github.com/robskillington/thrift
   vcs: git
   subpackages:
