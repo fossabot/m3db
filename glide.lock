@@ -1,5 +1,5 @@
-hash: 3676152b21215fe5cbdc6bc36a93d072d1c0181d21ab75d1a8debd6015ee44c3
-updated: 2018-05-18T11:34:59.456603862-04:00
+hash: 2f51f5d292eb90e3ee850fae9aaa81a6b45d918a2d7e4a62c4db26cf76296ae8
+updated: 2018-05-19T21:09:24.198452562-04:00
 imports:
 - name: github.com/apache/thrift
   version: 53dd39833a08ce33582e5ff31fa18bb4735d6731
@@ -101,7 +101,9 @@ imports:
   subpackages:
   - capnslog
 - name: github.com/couchbase/vellum
-  version: eb6ae3743b3f300f2136f83ca78c08cc071edbd4
+  version: 9dd7892f78ebda2ab28736f3bfd77608d07d2048
+  repo: https://github.com/prateek/vellum
+  vcs: git
   subpackages:
   - utf8
 - name: github.com/couchbaselabs/vellum
@@ -320,7 +322,7 @@ imports:
 - name: github.com/philhofer/fwd
   version: bb6d471dc95d4fe11e432687f8b70ff496cf3136
 - name: github.com/pilosa/pilosa
-  version: 9a64cff8ea61bf695967cc425d64771fe12dc9a0
+  version: 00f5a1539fb79ab099a3e612a401a5510784eacb
   subpackages:
   - roaring
 - name: github.com/pkg/errors
