@@ -137,6 +137,7 @@ type bootstrappableTestSetupOptions struct {
 	fetchBlocksMetadataEndpointVersion client.FetchBlocksMetadataEndpointVersion
 	bootstrapBlocksBatchSize           int
 	bootstrapBlocksConcurrency         int
+	bootstrapConsistencyLevel          topology.ReadConsistencyLevel
 	topologyInitializer                topology.Initializer
 	testStatsReporter                  xmetrics.TestStatsReporter
 }
@@ -183,6 +184,7 @@ func newDefaultBootstrappableTestSetups(
 			usingPeersBootstrapper     = !setupOpts[i].disablePeersBootstrapper
 			bootstrapBlocksBatchSize   = setupOpts[i].bootstrapBlocksBatchSize
 			bootstrapBlocksConcurrency = setupOpts[i].bootstrapBlocksConcurrency
+			bootstrapConsistencyLevel  = setupOpts[i].bootstrapConsistencyLevel
 			topologyInitializer        = setupOpts[i].topologyInitializer
 			testStatsReporter          = setupOpts[i].testStatsReporter
 			instanceOpts               = newMultiAddrTestOptions(opts, instance)
@@ -238,6 +240,12 @@ func newDefaultBootstrappableTestSetups(
 
 			adminClient := newMultiAddrAdminClient(
 				t, adminOpts, topologyInitializer, instrumentOpts, setup.shardSet, replicas, instance)
+
+			runtimeOptsMgr := setup.storageOpts.RuntimeOptionsManager()
+			runtimeOpts := runtimeOptsMgr.Get().
+				SetClientBootstrapConsistencyLevel(bootstrapConsistencyLevel)
+			runtimeOptsMgr.Update(runtimeOpts)
+
 			peersOpts := peers.NewOptions().
 				SetResultOptions(bsOpts).
 				SetAdminClient(adminClient).
@@ -246,7 +254,7 @@ func newDefaultBootstrappableTestSetups(
 				// the incremental path
 				SetDatabaseBlockRetrieverManager(setup.storageOpts.DatabaseBlockRetrieverManager()).
 				SetPersistManager(setup.storageOpts.PersistManager()).
-				SetRuntimeOptionsManager(setup.storageOpts.RuntimeOptionsManager())
+				SetRuntimeOptionsManager(runtimeOptsMgr)
 
 			peersBootstrapper, err = peers.NewPeersBootstrapperProvider(peersOpts, noOpAll)
 			require.NoError(t, err)
