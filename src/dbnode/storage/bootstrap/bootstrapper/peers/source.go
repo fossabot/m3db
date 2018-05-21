@@ -713,7 +713,6 @@ func (s *peersSource) peerAvailability(
 				fallthrough
 			case shard.Available:
 				shardPeers.numAvailablePeers++
-				break
 			default:
 				panic(
 					fmt.Sprintf("encountered unknown shard state: %s", shardState.String()))
