@@ -13,5 +13,7 @@ services:
       context: .
       dockerfile: Dockerfile
     image: m3db_dbnode01:latest
+    volumes:
+      - "~/m3db:/var/lib/m3db"
 networks:
   backend:

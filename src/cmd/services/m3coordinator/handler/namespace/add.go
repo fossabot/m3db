@@ -181,13 +181,16 @@ func metadataFromRequest(r *admin.NamespaceAddRequest) (namespace.Metadata, erro
 		return nil, err
 	}
 
+	indexOpts := namespace.NewIndexOptions().SetEnabled(true)
+
 	opts := namespace.NewOptions().
 		SetBootstrapEnabled(r.BootstrapEnabled).
 		SetFlushEnabled(r.FlushEnabled).
 		SetCleanupEnabled(r.CleanupEnabled).
 		SetRepairEnabled(r.RepairEnabled).
 		SetWritesToCommitLog(r.WritesToCommitlog).
-		SetRetentionOptions(ropts)
+		SetRetentionOptions(ropts).
+		SetIndexOptions(indexOpts)
 
 	return namespace.NewMetadata(ident.StringID(r.Name), opts)
 }
