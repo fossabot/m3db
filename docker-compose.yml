@@ -1,0 +1,15 @@
+version: "3.6"
+services:
+  dbnode01:
+    expose:
+      - "19000-19005"
+    ports:
+      - "0.0.0.0:19000-19005:19000-19005"
+    networks:
+      - backend
+    build:
+      context: .
+      dockerfile: Dockerfile
+    image: m3db_dbnode01:latest
+networks:
+  backend:
