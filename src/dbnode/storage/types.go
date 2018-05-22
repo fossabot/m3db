@@ -40,6 +40,7 @@ import (
 	"github.com/m3db/m3db/src/dbnode/storage/series"
 	"github.com/m3db/m3db/src/dbnode/x/xcounter"
 	"github.com/m3db/m3db/src/dbnode/x/xio"
+	"github.com/m3db/m3ninx/index/segment"
 	"github.com/m3db/m3x/context"
 	"github.com/m3db/m3x/ident"
 	"github.com/m3db/m3x/instrument"
@@ -219,6 +220,9 @@ type databaseNamespace interface {
 	// GetOwnedShards returns the database shards
 	GetOwnedShards() []databaseShard
 
+	// GetIndex returns the reverse index backing the namespace, if it exists.
+	GetIndex() (namespaceIndex, error)
+
 	// Tick performs any regular maintenance operations
 	Tick(c context.Cancellable) error
 
@@ -293,6 +297,12 @@ type databaseNamespace interface {
 		blockStart time.Time,
 		ShardBootstrapStates ShardBootstrapStates,
 		flush persist.DataFlush,
+	) error
+
+	// FlushIndex flushes in-memory index data.
+	FlushIndex(
+		tickStart time.Time,
+		flush persist.IndexFlush,
 	) error
 
 	// Snapshot snapshots unflushed in-memory data
@@ -393,6 +403,7 @@ type databaseShard interface {
 		opts block.FetchBlocksMetadataOptions,
 	) (block.FetchBlocksMetadataResults, PageToken, error)
 
+	// Bootstrap bootstraps the shard with provided data.
 	Bootstrap(
 		bootstrappedSeries *result.Map,
 	) error
@@ -409,16 +420,16 @@ type databaseShard interface {
 	// FlushState returns the flush state for this shard at block start.
 	FlushState(blockStart time.Time) fileOpState
 
-	// SnapshotState returns the snapshot state for this shard
+	// SnapshotState returns the snapshot state for this shard.
 	SnapshotState() (isSnapshotting bool, lastSuccessfulSnapshot time.Time)
 
-	// CleanupSnapshots cleans up snapshot files
+	// CleanupSnapshots cleans up snapshot files.
 	CleanupSnapshots(earliestToRetain time.Time) error
 
-	// CleanupFileSet cleans up fileset files
-	CleanupFileSet(earliestToRetain time.Time) error
+	// CleanupExpiredFileSets removes expired fileset files.
+	CleanupExpiredFileSets(earliestToRetain time.Time) error
 
-	// Repair repairs the shard data for a given time
+	// Repair repairs the shard data for a given time.
 	Repair(
 		ctx context.Context,
 		tr xtime.Range,
@@ -450,6 +461,17 @@ type namespaceIndex interface {
 	Bootstrap(
 		bootstrapResults result.IndexResults,
 	) error
+
+	// Replace replaces the block held by the index for the provided blockStart
+	// with a new block backed by the provided segments.
+	ReplaceBlock(
+		blockStart time.Time,
+		segments []segment.Segment,
+	) error
+
+	// CleanupExpiredFileSets removes expired fileset files. Expiration is calcuated
+	// using the provided `t` as the frame of reference.
+	CleanupExpiredFileSets(t time.Time) error
 
 	// Tick performs internal house keeping in the index, including block rotation,
 	// data eviction, and so on.

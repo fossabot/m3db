@@ -458,6 +458,34 @@ func FileSetAt(filePathPrefix string, namespace ident.ID, shard uint32, blockSta
 	return FileSetFile{}, false, nil
 }
 
+// IndexFileSetsAt returns all FileSetFile(s) for the given namespace/blockStart combination.
+// NB: It returns all complete Volumes found on disk.
+func IndexFileSetsAt(filePathPrefix string, namespace ident.ID, blockStart time.Time) (FileSetFilesSlice, error) {
+	matches, err := filesetFiles(filesetFilesSelector{
+		fileSetType:    persist.FileSetFlushType,
+		contentType:    persist.FileSetIndexContentType,
+		filePathPrefix: filePathPrefix,
+		namespace:      namespace,
+		pattern:        filesetFilePattern,
+	})
+	if err != nil {
+		return nil, err
+	}
+
+	filesets := make(FileSetFilesSlice, 0, len(matches))
+	matches.sortByTimeAscending()
+	for _, fileset := range matches {
+		if fileset.ID.BlockStart.Equal(blockStart) {
+			if !fileset.HasCheckpointFile() {
+				continue
+			}
+			filesets = append(filesets, fileset)
+		}
+	}
+
+	return filesets, nil
+}
+
 // DeleteFileSetAt deletes a FileSetFile for a given namespace/shard/blockStart combination if it exists.
 func DeleteFileSetAt(filePathPrefix string, namespace ident.ID, shard uint32, t time.Time) error {
 	fileset, ok, err := FileSetAt(filePathPrefix, namespace, shard, t)
@@ -471,14 +499,29 @@ func DeleteFileSetAt(filePathPrefix string, namespace ident.ID, shard uint32, t 
 	return DeleteFiles(fileset.AbsoluteFilepaths)
 }
 
-// FileSetBefore returns all the fileset files whose timestamps are earlier than a given time.
-func FileSetBefore(filePathPrefix string, namespace ident.ID, shard uint32, t time.Time) ([]string, error) {
+// DataFileSetsBefore returns all the flush data fileset files whose timestamps are earlier than a given time.
+func DataFileSetsBefore(filePathPrefix string, namespace ident.ID, shard uint32, t time.Time) ([]string, error) {
 	matched, err := filesetFiles(filesetFilesSelector{
 		fileSetType:    persist.FileSetFlushType,
 		contentType:    persist.FileSetDataContentType,
 		filePathPrefix: filePathPrefix,
 		namespace:      namespace,
 		shard:          shard,
+		pattern:        filesetFilePattern,
+	})
+	if err != nil {
+		return nil, err
+	}
+	return FilesBefore(matched.Filepaths(), t)
+}
+
+// IndexFileSetsBefore returns all the flush index fileset files whose timestamps are earlier than a given time.
+func IndexFileSetsBefore(filePathPrefix string, namespace ident.ID, t time.Time) ([]string, error) {
+	matched, err := filesetFiles(filesetFilesSelector{
+		fileSetType:    persist.FileSetFlushType,
+		contentType:    persist.FileSetIndexContentType,
+		filePathPrefix: filePathPrefix,
+		namespace:      namespace,
 		pattern:        filesetFilePattern,
 	})
 	if err != nil {

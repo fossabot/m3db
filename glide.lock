@@ -1,14 +1,10 @@
-hash: c704adfec68b742ed882bd1e22c7563d707ad8aaf90c4248755a6cb2c2ce7ecf
-updated: 2018-05-17T14:33:54.199257-04:00
+hash: 9d0a4a0ca7448bcb10dfad80455222d7216ea8deff9334f7570e9e29f8cb42d4
+updated: 2018-05-21T11:43:09.730401-04:00
 imports:
-- name: github.com/alecthomas/template
-  version: a0175ee3bccc567396460bf5acd36800cb10c49c
-  subpackages:
-  - parse
-- name: github.com/alecthomas/units
-  version: 2efee857e7cfd4f3d0138cc3cbb1b4966962b93a
 - name: github.com/apache/thrift
-  version: 53dd39833a08ce33582e5ff31fa18bb4735d6731
+  version: c2fb1c4e8c931d22617bebb0bf388cb4d5e6fcff
+  repo: https://github.com/m3db/thrift
+  vcs: git
   subpackages:
   - lib/go/thrift
 - name: github.com/beorn7/perks
@@ -115,7 +111,7 @@ imports:
   subpackages:
   - regexp
 - name: github.com/davecgh/go-spew
-  version: adab96458c51a58dc1783b3335dcce5461522e75
+  version: 5215b55f46b2b919f50a1df0eaa5886afe4e3b3d
   subpackages:
   - spew
 - name: github.com/dgrijalva/jwt-go
@@ -162,6 +158,13 @@ imports:
   version: 553a641470496b2327abcac10b36396bd98e45c9
 - name: github.com/google/btree
   version: 925471ac9e2131377a91e1595defec898166fe49
+- name: github.com/google/go-cmp
+  version: 3af367b6b30c263d47e8895973edcca9a49cf029
+  subpackages:
+  - cmp
+  - cmp/internal/diff
+  - cmp/internal/function
+  - cmp/internal/value
 - name: github.com/gorilla/context
   version: 08b5f424b9271eedf6f9f0ce86cb9396ed337a42
 - name: github.com/gorilla/mux
@@ -185,7 +188,7 @@ imports:
 - name: github.com/m3db/bloom
   version: 47fe1193cdb900de7193d1f3d26ea9b2cbf6fb31
 - name: github.com/m3db/m3cluster
-  version: 53fc512c11e1ed03db2d65dac4c139a3c2ff2eda
+  version: 97360c9dac803def743351d084a2449a85e2066b
   subpackages:
   - client
   - client/etcd
@@ -229,7 +232,7 @@ imports:
   - metric
   - policy
 - name: github.com/m3db/m3ninx
-  version: d5d44ea341add6babe72dd16f91503e9c9db5ad2
+  version: 8f5e6a0f31393f5b0d79086250ac1a528747c0c7
   subpackages:
   - doc
   - generated/proto/fswriter
@@ -252,7 +255,7 @@ imports:
   - search/searcher
   - x
 - name: github.com/m3db/m3x
-  version: 5b90159b38cdf9a636a4de6fd601fb204429ad4b
+  version: c457e96f2dea19cf2f590e40d443b62ced1e7820
   vcs: git
   subpackages:
   - checked
@@ -319,7 +322,7 @@ imports:
 - name: github.com/philhofer/fwd
   version: bb6d471dc95d4fe11e432687f8b70ff496cf3136
 - name: github.com/pilosa/pilosa
-  version: 1ae470514004ce32d84d23cb013a557a989e1fd0
+  version: 00f5a1539fb79ab099a3e612a401a5510784eacb
   subpackages:
   - roaring
 - name: github.com/pkg/errors
@@ -339,13 +342,15 @@ imports:
   subpackages:
   - go
 - name: github.com/prometheus/common
-  version: 195bde7883f7c39ea62b0d92ab7359b5327065cb
+  version: 9e0844febd9e2856f839c9cb974fbd676d1755a8
   subpackages:
   - expfmt
   - internal/bitbucket.org/ww/goautoneg
   - model
 - name: github.com/prometheus/procfs
-  version: 1878d9fbb537119d24b21ca07effd591627cd160
+  version: a1dba9ce8baed984a2495b658c82687f8157b98f
+  subpackages:
+  - xfs
 - name: github.com/prometheus/prometheus
   version: 998dfcbac689ae832ea64ca134fcb096f61a7f62
   subpackages:
@@ -524,13 +529,6 @@ testImports:
   version: 600d898af40aa09a7a93ecb9265d87b0504b6f03
 - name: github.com/fortytw2/leaktest
   version: 3677f62bb30dbf3b042c4c211245d072aa9ee075
-- name: github.com/google/go-cmp
-  version: 5411ab924f9ffa6566244a9e504bc347edacffd3
-  subpackages:
-  - cmp
-  - cmp/internal/diff
-  - cmp/internal/function
-  - cmp/internal/value
 - name: github.com/leanovate/gopter
   version: 9e6101e5a87586b269acf3d0d61f363e4317309f
   subpackages:

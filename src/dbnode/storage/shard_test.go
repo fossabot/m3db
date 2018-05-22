@@ -44,6 +44,7 @@ import (
 	"github.com/m3db/m3x/checked"
 	"github.com/m3db/m3x/context"
 	"github.com/m3db/m3x/ident"
+	xtest "github.com/m3db/m3x/test"
 	xtime "github.com/m3db/m3x/time"
 
 	"github.com/golang/mock/gomock"
@@ -98,7 +99,7 @@ func TestShardDontNeedBootstrap(t *testing.T) {
 		&testIncreasingIndex{}, commitLogWriteNoOp, nil, false, opts, seriesOpts).(*dbShard)
 	defer shard.Close()
 
-	require.Equal(t, Bootstrapped, shard.bs)
+	require.Equal(t, Bootstrapped, shard.bootstrapState)
 	require.True(t, shard.newSeriesBootstrapped)
 }
 
@@ -111,7 +112,7 @@ func TestShardBootstrapState(t *testing.T) {
 		&testIncreasingIndex{}, commitLogWriteNoOp, nil, false, opts, seriesOpts).(*dbShard)
 	defer shard.Close()
 
-	require.Equal(t, Bootstrapped, shard.bs)
+	require.Equal(t, Bootstrapped, shard.bootstrapState)
 	require.Equal(t, Bootstrapped, shard.BootstrapState())
 }
 
@@ -173,13 +174,13 @@ func TestShardBootstrapWithError(t *testing.T) {
 
 	require.NotNil(t, err)
 	require.Equal(t, "series error", err.Error())
-	require.Equal(t, Bootstrapped, s.bs)
+	require.Equal(t, Bootstrapped, s.bootstrapState)
 }
 
 func TestShardFlushDuringBootstrap(t *testing.T) {
 	s := testDatabaseShard(t, testDatabaseOptions())
 	defer s.Close()
-	s.bs = Bootstrapping
+	s.bootstrapState = Bootstrapping
 	err := s.Flush(time.Now(), nil)
 	require.Equal(t, err, errShardNotBootstrappedToFlush)
 }
@@ -192,7 +193,7 @@ func TestShardFlushSeriesFlushError(t *testing.T) {
 
 	s := testDatabaseShard(t, testDatabaseOptions())
 	defer s.Close()
-	s.bs = Bootstrapped
+	s.bootstrapState = Bootstrapped
 	s.flushState.statesByTime[xtime.ToUnixNano(blockStart)] = fileOpState{
 		Status:      fileOpFailed,
 		NumFailures: 1,
@@ -204,12 +205,12 @@ func TestShardFlushSeriesFlushError(t *testing.T) {
 		Persist: func(ident.ID, ident.Tags, ts.Segment, uint32) error { return nil },
 		Close:   func() error { closed = true; return nil },
 	}
-	prepareOpts := persist.DataPrepareOptionsMatcher{
-		NsMetadata: s.namespace,
-		Shard:      s.shard,
-		BlockStart: blockStart,
-	}
-	flush.EXPECT().Prepare(prepareOpts).Return(prepared, nil)
+	prepareOpts := xtest.CmpMatcher(persist.DataPrepareOptions{
+		NamespaceMetadata: s.namespace,
+		Shard:             s.shard,
+		BlockStart:        blockStart,
+	})
+	flush.EXPECT().PrepareData(prepareOpts).Return(prepared, nil)
 
 	flushed := make(map[int]struct{})
 	for i := 0; i < 2; i++ {
@@ -223,7 +224,7 @@ func TestShardFlushSeriesFlushError(t *testing.T) {
 		curr.EXPECT().IsEmpty().Return(false).AnyTimes()
 		curr.EXPECT().
 			Flush(gomock.Any(), blockStart, gomock.Any()).
-			Do(func(context.Context, time.Time, persist.Fn) {
+			Do(func(context.Context, time.Time, persist.DataFn) {
 				flushed[i] = struct{}{}
 			}).
 			Return(series.FlushOutcomeErr, expectedErr)
@@ -257,7 +258,7 @@ func TestShardFlushSeriesFlushSuccess(t *testing.T) {
 
 	s := testDatabaseShard(t, testDatabaseOptions())
 	defer s.Close()
-	s.bs = Bootstrapped
+	s.bootstrapState = Bootstrapped
 	s.flushState.statesByTime[xtime.ToUnixNano(blockStart)] = fileOpState{
 		Status:      fileOpFailed,
 		NumFailures: 1,
@@ -270,12 +271,12 @@ func TestShardFlushSeriesFlushSuccess(t *testing.T) {
 		Close:   func() error { closed = true; return nil },
 	}
 
-	prepareOpts := persist.DataPrepareOptionsMatcher{
-		NsMetadata: s.namespace,
-		Shard:      s.shard,
-		BlockStart: blockStart,
-	}
-	flush.EXPECT().Prepare(prepareOpts).Return(prepared, nil)
+	prepareOpts := xtest.CmpMatcher(persist.DataPrepareOptions{
+		NamespaceMetadata: s.namespace,
+		Shard:             s.shard,
+		BlockStart:        blockStart,
+	})
+	flush.EXPECT().PrepareData(prepareOpts).Return(prepared, nil)
 
 	flushed := make(map[int]struct{})
 	for i := 0; i < 2; i++ {
@@ -285,7 +286,7 @@ func TestShardFlushSeriesFlushSuccess(t *testing.T) {
 		curr.EXPECT().IsEmpty().Return(false).AnyTimes()
 		curr.EXPECT().
 			Flush(gomock.Any(), blockStart, gomock.Any()).
-			Do(func(context.Context, time.Time, persist.Fn) {
+			Do(func(context.Context, time.Time, persist.DataFn) {
 				flushed[i] = struct{}{}
 			}).
 			Return(series.FlushOutcomeFlushedToDisk, nil)
@@ -318,7 +319,7 @@ func TestShardSnapshotShardNotBootstrapped(t *testing.T) {
 
 	s := testDatabaseShard(t, testDatabaseOptions())
 	defer s.Close()
-	s.bs = Bootstrapping
+	s.bootstrapState = Bootstrapping
 
 	flush := persist.NewMockDataFlush(ctrl)
 	err := s.Snapshot(blockStart, blockStart, flush)
@@ -333,7 +334,7 @@ func TestShardSnapshotSeriesSnapshotSuccess(t *testing.T) {
 
 	s := testDatabaseShard(t, testDatabaseOptions())
 	defer s.Close()
-	s.bs = Bootstrapped
+	s.bootstrapState = Bootstrapped
 
 	var closed bool
 	flush := persist.NewMockDataFlush(ctrl)
@@ -342,16 +343,16 @@ func TestShardSnapshotSeriesSnapshotSuccess(t *testing.T) {
 		Close:   func() error { closed = true; return nil },
 	}
 
-	prepareOpts := persist.DataPrepareOptionsMatcher{
-		NsMetadata:  s.namespace,
-		Shard:       s.shard,
-		BlockStart:  blockStart,
-		FileSetType: persist.FileSetSnapshotType,
+	prepareOpts := xtest.CmpMatcher(persist.DataPrepareOptions{
+		NamespaceMetadata: s.namespace,
+		Shard:             s.shard,
+		BlockStart:        blockStart,
+		FileSetType:       persist.FileSetSnapshotType,
 		Snapshot: persist.DataPrepareSnapshotOptions{
 			SnapshotTime: blockStart,
 		},
-	}
-	flush.EXPECT().Prepare(prepareOpts).Return(prepared, nil)
+	})
+	flush.EXPECT().PrepareData(prepareOpts).Return(prepared, nil)
 
 	snapshotted := make(map[int]struct{})
 	for i := 0; i < 2; i++ {
@@ -361,7 +362,7 @@ func TestShardSnapshotSeriesSnapshotSuccess(t *testing.T) {
 		series.EXPECT().IsEmpty().Return(false).AnyTimes()
 		series.EXPECT().
 			Snapshot(gomock.Any(), blockStart, gomock.Any()).
-			Do(func(context.Context, time.Time, persist.Fn) {
+			Do(func(context.Context, time.Time, persist.DataFn) {
 				snapshotted[i] = struct{}{}
 			}).
 			Return(nil)
@@ -859,7 +860,7 @@ func TestShardFetchBlocksIDExists(t *testing.T) {
 	require.Equal(t, expected, res)
 }
 
-func TestShardCleanupFileSet(t *testing.T) {
+func TestShardCleanupExpiredFileSets(t *testing.T) {
 	opts := testDatabaseOptions()
 	shard := testDatabaseShard(t, opts)
 	defer shard.Close()
@@ -871,7 +872,7 @@ func TestShardCleanupFileSet(t *testing.T) {
 		deletedFiles = append(deletedFiles, files...)
 		return nil
 	}
-	require.NoError(t, shard.CleanupFileSet(time.Now()))
+	require.NoError(t, shard.CleanupExpiredFileSets(time.Now()))
 	require.Equal(t, []string{defaultTestNs1ID.String(), "0"}, deletedFiles)
 }
 

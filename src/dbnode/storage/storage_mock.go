@@ -44,6 +44,7 @@ import (
 	"github.com/m3db/m3db/src/dbnode/storage/series"
 	"github.com/m3db/m3db/src/dbnode/x/xcounter"
 	"github.com/m3db/m3db/src/dbnode/x/xio"
+	"github.com/m3db/m3ninx/index/segment"
 	"github.com/m3db/m3x/context"
 	"github.com/m3db/m3x/ident"
 	"github.com/m3db/m3x/instrument"
@@ -818,6 +819,19 @@ func (mr *MockdatabaseNamespaceMockRecorder) GetOwnedShards() *gomock.Call {
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetOwnedShards", reflect.TypeOf((*MockdatabaseNamespace)(nil).GetOwnedShards))
 }
 
+// GetIndex mocks base method
+func (m *MockdatabaseNamespace) GetIndex() (namespaceIndex, error) {
+	ret := m.ctrl.Call(m, "GetIndex")
+	ret0, _ := ret[0].(namespaceIndex)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// GetIndex indicates an expected call of GetIndex
+func (mr *MockdatabaseNamespaceMockRecorder) GetIndex() *gomock.Call {
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetIndex", reflect.TypeOf((*MockdatabaseNamespace)(nil).GetIndex))
+}
+
 // Tick mocks base method
 func (m *MockdatabaseNamespace) Tick(c context.Cancellable) error {
 	ret := m.ctrl.Call(m, "Tick", c)
@@ -943,6 +957,18 @@ func (m *MockdatabaseNamespace) Flush(blockStart time.Time, ShardBootstrapStates
 // Flush indicates an expected call of Flush
 func (mr *MockdatabaseNamespaceMockRecorder) Flush(blockStart, ShardBootstrapStates, flush interface{}) *gomock.Call {
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Flush", reflect.TypeOf((*MockdatabaseNamespace)(nil).Flush), blockStart, ShardBootstrapStates, flush)
+}
+
+// FlushIndex mocks base method
+func (m *MockdatabaseNamespace) FlushIndex(tickStart time.Time, flush persist.IndexFlush) error {
+	ret := m.ctrl.Call(m, "FlushIndex", tickStart, flush)
+	ret0, _ := ret[0].(error)
+	return ret0
+}
+
+// FlushIndex indicates an expected call of FlushIndex
+func (mr *MockdatabaseNamespaceMockRecorder) FlushIndex(tickStart, flush interface{}) *gomock.Call {
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "FlushIndex", reflect.TypeOf((*MockdatabaseNamespace)(nil).FlushIndex), tickStart, flush)
 }
 
 // Snapshot mocks base method
@@ -1334,16 +1360,16 @@ func (mr *MockdatabaseShardMockRecorder) CleanupSnapshots(earliestToRetain inter
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "CleanupSnapshots", reflect.TypeOf((*MockdatabaseShard)(nil).CleanupSnapshots), earliestToRetain)
 }
 
-// CleanupFileSet mocks base method
-func (m *MockdatabaseShard) CleanupFileSet(earliestToRetain time.Time) error {
-	ret := m.ctrl.Call(m, "CleanupFileSet", earliestToRetain)
+// CleanupExpiredFileSets mocks base method
+func (m *MockdatabaseShard) CleanupExpiredFileSets(earliestToRetain time.Time) error {
+	ret := m.ctrl.Call(m, "CleanupExpiredFileSets", earliestToRetain)
 	ret0, _ := ret[0].(error)
 	return ret0
 }
 
-// CleanupFileSet indicates an expected call of CleanupFileSet
-func (mr *MockdatabaseShardMockRecorder) CleanupFileSet(earliestToRetain interface{}) *gomock.Call {
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "CleanupFileSet", reflect.TypeOf((*MockdatabaseShard)(nil).CleanupFileSet), earliestToRetain)
+// CleanupExpiredFileSets indicates an expected call of CleanupExpiredFileSets
+func (mr *MockdatabaseShardMockRecorder) CleanupExpiredFileSets(earliestToRetain interface{}) *gomock.Call {
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "CleanupExpiredFileSets", reflect.TypeOf((*MockdatabaseShard)(nil).CleanupExpiredFileSets), earliestToRetain)
 }
 
 // Repair mocks base method
@@ -1429,6 +1455,30 @@ func (m *MocknamespaceIndex) Bootstrap(bootstrapResults result.IndexResults) err
 // Bootstrap indicates an expected call of Bootstrap
 func (mr *MocknamespaceIndexMockRecorder) Bootstrap(bootstrapResults interface{}) *gomock.Call {
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Bootstrap", reflect.TypeOf((*MocknamespaceIndex)(nil).Bootstrap), bootstrapResults)
+}
+
+// ReplaceBlock mocks base method
+func (m *MocknamespaceIndex) ReplaceBlock(blockStart time.Time, segments []segment.Segment) error {
+	ret := m.ctrl.Call(m, "ReplaceBlock", blockStart, segments)
+	ret0, _ := ret[0].(error)
+	return ret0
+}
+
+// ReplaceBlock indicates an expected call of ReplaceBlock
+func (mr *MocknamespaceIndexMockRecorder) ReplaceBlock(blockStart, segments interface{}) *gomock.Call {
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ReplaceBlock", reflect.TypeOf((*MocknamespaceIndex)(nil).ReplaceBlock), blockStart, segments)
+}
+
+// CleanupExpiredFileSets mocks base method
+func (m *MocknamespaceIndex) CleanupExpiredFileSets(t time.Time) error {
+	ret := m.ctrl.Call(m, "CleanupExpiredFileSets", t)
+	ret0, _ := ret[0].(error)
+	return ret0
+}
+
+// CleanupExpiredFileSets indicates an expected call of CleanupExpiredFileSets
+func (mr *MocknamespaceIndexMockRecorder) CleanupExpiredFileSets(t interface{}) *gomock.Call {
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "CleanupExpiredFileSets", reflect.TypeOf((*MocknamespaceIndex)(nil).CleanupExpiredFileSets), t)
 }
 
 // Tick mocks base method
